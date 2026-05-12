@@ -44,7 +44,7 @@ function Logo({ dark = false }) {
     return (
       <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
         <img src={LOGO_URL} alt="Dry Age Biltong"
-          style={{ height: 48, width: 'auto', filter: dark ? 'invert(1)' : 'none' }} />
+          style={{ height: 120, width: 'auto', filter: dark ? 'invert(1)' : 'none' }} />
       </div>
     );
   }
