@@ -443,7 +443,7 @@ export default function App() {
     return (
       <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: m ? '1rem' : '2rem 1rem' }}>
         <div style={{ maxWidth: 440, width: '100%' }}>
-          {!m && <Logo />}
+          <Logo small={m} />
           <div style={{ background: W, border: BORDER, padding: m ? '1.5rem 1rem' : '3rem 2rem', textAlign: 'center' }}>
             <div style={{ width: 44, height: 44, background: B, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', color: W, fontSize: '1.2rem', fontWeight: 900 }}>✓</div>
             <div style={{ fontSize: m ? '1rem' : '1.2rem', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Order Placed</div>
@@ -466,7 +466,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', padding: m ? '0.5rem' : '2rem 1rem', boxSizing: 'border-box' }}>
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
-        {!m && <Logo />}
+        <Logo small={m} />
         <div style={{ background: W, border: BORDER, padding: m ? '0.85rem 0.85rem' : '2rem' }}>
 
           <div style={{ fontSize: m ? '1.05rem' : '1.4rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.3px', marginBottom: m ? '0.1rem' : '0.2rem' }}>Place an Order</div>
