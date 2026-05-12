@@ -186,14 +186,14 @@ export default function App() {
   async function move(id, newStatus) {
     const order = orders.find(o => o.id === id);
     if (!order || order.status === newStatus) return;
-    await callAPI('/api/update-order', { method: 'POST', body: { id, status: newStatus } }, pin);
-    loadOrders();
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+    callAPI('/api/update-order', { method: 'POST', body: { id, status: newStatus } }, pin);
   }
 
   async function del(id) {
     if (!window.confirm('Remove this order?')) return;
-    await callAPI('/api/delete-order', { method: 'DELETE', body: { id } }, pin);
-    loadOrders();
+    setOrders(prev => prev.filter(o => o.id !== id));
+    callAPI('/api/delete-order', { method: 'DELETE', body: { id } }, pin);
   }
 
   // ── Desktop drag ──────────────────────────────────────────────────────────
