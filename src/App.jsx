@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
-const LOGO_URL = 'https://staging4.dryagebiltong.com.au/wp-content/uploads/2026/05/dry-age-biltong-square-logo-512.png';
+const LOGO_URL = 'https://staging4.dryagebiltong.com.au/wp-content/uploads/2026/05/download.png';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const B      = '#0a0a0a';
