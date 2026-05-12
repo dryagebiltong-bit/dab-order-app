@@ -332,7 +332,7 @@ export default function App() {
       </div>
     );
   }
-  // ── STAFF BOARD ───────────────────────────────────────────────────────────
+  /// ── STAFF BOARD ───────────────────────────────────────────────────────────
   if (view === 'staff' && pin) {
     const activeOrders = orders.filter(o => o.status !== 'picked_up');
 
@@ -342,7 +342,7 @@ export default function App() {
           onLock={() => { setPin(''); setView('customer'); }}
           archiveView={archiveView} setArchiveView={setArchiveView} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(200px, 1fr))', gap: '0.65rem', overflowX: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(200px, 1fr))', gap: '0.65rem', overflowX: 'auto' }}>
           {COLS.map(col => {
             const cards = activeOrders.filter(o => o.status === col.id);
             const over  = dragOver === col.id;
@@ -391,7 +391,7 @@ export default function App() {
                         </div>
                       )}
                       <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
-                        {[...COLS.filter(c => c.id !== col.id), { id: 'picked_up', short: 'DONE' }].map(c => (
+                        {COLS.filter(c => c.id !== col.id).map(c => (
                           <button key={c.id} onClick={() => move(o.id, c.id)}
                             style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
@@ -406,10 +406,14 @@ export default function App() {
               </div>
             );
           })}
-        </div>
-      </div>
-    );
-  }
+
+          {/* Archive drop column */}
+          <div
+            style={{ background: dragOver === 'picked_up' ? '#1a1a1a' : '#141414', border: dragOver === 'picked_up' ? '2px dashed #888' : '2px dashed #222', minHeight: 420, display: 'flex', flexDirection: 'column', transition: 'all 0.15s' }}
+            onDragOver={e => onDragOver(e, 'picked_up')}
+            onDrop={e => onDrop(e, 'picked_up')}
+            onDragLeave={() => setDragOver(null)}>
+            <div style={{ background: '#1a1
 
   // ── SUCCESS ───────────────────────────────────────────────────────────────
   if (success) {
