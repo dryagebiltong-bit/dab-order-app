@@ -10,14 +10,11 @@ const G      = '#f8f8f8';
 const BORDER = `2px solid ${B}`;
 const FONT   = '"DM Sans", sans-serif';
 
-// Main board columns — picked_up is archived, not shown here
 const COLS = [
   { id: 'received',  label: 'Order Received',  short: 'NEW',   bg: B,         fg: W },
   { id: 'preparing', label: 'Preparing',        short: 'PREP',  bg: '#1a3a5c', fg: W },
   { id: 'ready',     label: 'Ready for Pickup', short: 'READY', bg: '#1a4a1a', fg: W },
 ];
-
-const ALL_STATUSES = ['received', 'preparing', 'ready', 'picked_up'];
 
 const inp = {
   display: 'block', width: '100%', height: 48, border: BORDER,
@@ -86,13 +83,11 @@ async function callAPI(path, options = {}, pin = null) {
 function StaffHeader({ orders, onRefresh, onLock, archiveView, setArchiveView }) {
   const active   = orders.filter(o => o.status !== 'picked_up').length;
   const archived = orders.filter(o => o.status === 'picked_up').length;
-
   const headerBtn = {
     background: 'none', border: '1px solid #333', color: '#666', fontFamily: FONT,
     fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase',
     padding: '0.35rem 0.65rem', cursor: 'pointer',
   };
-
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -119,18 +114,18 @@ function StaffHeader({ orders, onRefresh, onLock, archiveView, setArchiveView })
 }
 
 export default function App() {
-  const [view, setView]             = useState('customer');
-  const [orders, setOrders]         = useState([]);
-  const [archiveView, setArchiveView] = useState(false);
-  const [success, setSuccess]       = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors]         = useState({});
-  const [dragOver, setDragOver]     = useState(null);
-  const [pin, setPin]               = useState('');
-  const [pinInput, setPinInput]     = useState('');
-  const [pinError, setPinError]     = useState('');
-  const [pinLoading, setPinLoading] = useState(false);
+  const [view, setView]                   = useState('customer');
+  const [orders, setOrders]               = useState([]);
+  const [archiveView, setArchiveView]     = useState(false);
   const [archiveSearch, setArchiveSearch] = useState('');
+  const [success, setSuccess]             = useState(false);
+  const [submitting, setSubmitting]       = useState(false);
+  const [errors, setErrors]               = useState({});
+  const [dragOver, setDragOver]           = useState(null);
+  const [pin, setPin]                     = useState('');
+  const [pinInput, setPinInput]           = useState('');
+  const [pinError, setPinError]           = useState('');
+  const [pinLoading, setPinLoading]       = useState(false);
   const dragId = useRef(null);
 
   const [form, setForm] = useState({
@@ -156,15 +151,9 @@ export default function App() {
     if (!pinInput.trim()) return;
     setPinLoading(true);
     setPinError('');
-    const { ok } = await callAPI('/api/verify-pin', {
-      method: 'POST', body: { pin: pinInput.trim() },
-    });
-    if (ok) {
-      setPin(pinInput.trim());
-      setPinInput('');
-    } else {
-      setPinError('Incorrect PIN. Try again.');
-    }
+    const { ok } = await callAPI('/api/verify-pin', { method: 'POST', body: { pin: pinInput.trim() } });
+    if (ok) { setPin(pinInput.trim()); setPinInput(''); }
+    else setPinError('Incorrect PIN. Try again.');
     setPinLoading(false);
   }
 
@@ -183,16 +172,9 @@ export default function App() {
     setSubmitting(true);
     const { ok } = await callAPI('/api/create-order', {
       method: 'POST',
-      body: {
-        name: form.name.trim(), phone: form.phone.trim(),
-        order_text: form.order_text.trim(), pickup: form.pickup,
-        notes: form.notes.trim(),
-      },
+      body: { name: form.name.trim(), phone: form.phone.trim(), order_text: form.order_text.trim(), pickup: form.pickup, notes: form.notes.trim() },
     });
-    if (ok) {
-      setSuccess(true);
-      setForm({ name: '', phone: '', order_text: '', pickup: '', notes: '' });
-    }
+    if (ok) { setSuccess(true); setForm({ name: '', phone: '', order_text: '', pickup: '', notes: '' }); }
     setSubmitting(false);
   }
 
@@ -226,20 +208,15 @@ export default function App() {
         <div style={{ width: '100%', maxWidth: 340 }}>
           <Logo dark />
           <div style={{ border: '2px solid #222', padding: '2rem', background: '#161616' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '3px', textTransform: 'uppercase', color: '#666', marginBottom: '1.5rem', textAlign: 'center' }}>
-              Staff Access
-            </div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '3px', textTransform: 'uppercase', color: '#666', marginBottom: '1.5rem', textAlign: 'center' }}>Staff Access</div>
             <label style={{ ...lbl, color: '#666' }}>PIN</label>
-            <input
-              type="password" inputMode="numeric" maxLength={8}
-              value={pinInput} placeholder="Enter PIN"
+            <input type="password" inputMode="numeric" maxLength={8} value={pinInput} placeholder="Enter PIN"
               onChange={e => { setPinInput(e.target.value); setPinError(''); }}
               onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
               style={{ ...inp, background: '#1e1e1e', border: '2px solid #333', color: W, marginBottom: '1rem' }}
               autoFocus />
             {pinError && <div style={{ fontSize: '0.75rem', color: '#cc4444', fontWeight: 700, marginBottom: '0.75rem' }}>{pinError}</div>}
-            <button onClick={handlePinSubmit} disabled={pinLoading}
-              style={{ ...btnBlack, opacity: pinLoading ? 0.6 : 1 }}>
+            <button onClick={handlePinSubmit} disabled={pinLoading} style={{ ...btnBlack, opacity: pinLoading ? 0.6 : 1 }}>
               {pinLoading ? 'Checking...' : 'Enter'}
             </button>
           </div>
@@ -253,35 +230,23 @@ export default function App() {
     );
   }
 
-// ── ARCHIVE VIEW ──────────────────────────────────────────────────────────
+  // ── ARCHIVE VIEW ──────────────────────────────────────────────────────────
   if (view === 'staff' && pin && archiveView) {
     const q = archiveSearch.toLowerCase().trim();
     const archived = orders
       .filter(o => o.status === 'picked_up')
-      .filter(o => !q || [o.name, o.phone, o.order_text, o.notes, o.pickup]
-        .some(f => (f || '').toLowerCase().includes(q)))
+      .filter(o => !q || [o.name, o.phone, o.order_text, o.notes, o.pickup].some(f => (f || '').toLowerCase().includes(q)))
       .sort((a, b) => b.created_at - a.created_at);
-
     return (
       <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box' }}>
         <StaffHeader orders={orders} onRefresh={loadOrders}
           onLock={() => { setPin(''); setView('customer'); }}
           archiveView={archiveView} setArchiveView={setArchiveView} />
-
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
           <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
-            <input
-              type="text"
-              placeholder="Search by name, phone, item, date…"
-              value={archiveSearch}
+            <input type="text" placeholder="Search by name, phone, item, date…" value={archiveSearch}
               onChange={e => setArchiveSearch(e.target.value)}
-              style={{
-                display: 'block', width: '100%', height: 48,
-                background: '#161616', border: '1px solid #333', color: W,
-                fontFamily: FONT, fontSize: '0.9rem', fontWeight: 500,
-                padding: '0 2.5rem 0 1rem', boxSizing: 'border-box',
-                outline: 'none', borderRadius: 0,
-              }} />
+              style={{ display: 'block', width: '100%', height: 48, background: '#161616', border: '1px solid #333', color: W, fontFamily: FONT, fontSize: '0.9rem', fontWeight: 500, padding: '0 2.5rem 0 1rem', boxSizing: 'border-box', outline: 'none', borderRadius: 0 }} />
             {archiveSearch && (
               <button onClick={() => setArchiveSearch('')}
                 style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
@@ -289,17 +254,14 @@ export default function App() {
                 onMouseLeave={e => e.currentTarget.style.color = '#555'}>×</button>
             )}
           </div>
-
           <div style={{ fontSize: '0.62rem', color: '#444', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
             {q ? `${archived.length} result${archived.length !== 1 ? 's' : ''} for "${archiveSearch}"` : `${archived.length} orders`}
           </div>
-
           {archived.length === 0 && (
             <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4rem' }}>
               {q ? 'No matching orders' : 'No picked up orders yet'}
             </div>
           )}
-
           {archived.map(o => (
             <div key={o.id} style={{ background: '#161616', border: '1px solid #222', padding: '1rem 1.25rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
               <div style={{ flex: 1 }}>
@@ -332,16 +294,15 @@ export default function App() {
       </div>
     );
   }
-  /// ── STAFF BOARD ───────────────────────────────────────────────────────────
+
+  // ── STAFF BOARD ───────────────────────────────────────────────────────────
   if (view === 'staff' && pin) {
     const activeOrders = orders.filter(o => o.status !== 'picked_up');
-
     return (
       <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box' }}>
         <StaffHeader orders={orders} onRefresh={loadOrders}
           onLock={() => { setPin(''); setView('customer'); }}
           archiveView={archiveView} setArchiveView={setArchiveView} />
-
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(200px, 1fr))', gap: '0.65rem', overflowX: 'auto' }}>
           {COLS.map(col => {
             const cards = activeOrders.filter(o => o.status === col.id);
@@ -413,7 +374,30 @@ export default function App() {
             onDragOver={e => onDragOver(e, 'picked_up')}
             onDrop={e => onDrop(e, 'picked_up')}
             onDragLeave={() => setDragOver(null)}>
-            <div style={{ background: '#1a1
+            <div style={{ background: '#1a1a1a', padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: dragOver === 'picked_up' ? '#888' : '#444' }}>Order Picked Up</span>
+              <span style={{ background: 'rgba(255,255,255,0.05)', color: '#444', fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>
+                {orders.filter(o => o.status === 'picked_up').length}
+              </span>
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', padding: '2rem' }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+                stroke={dragOver === 'picked_up' ? '#888' : '#2a2a2a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{ transition: 'stroke 0.15s' }}>
+                <polyline points="21 8 21 21 3 21 3 8" />
+                <rect x="1" y="3" width="22" height="5" />
+                <line x1="10" y1="12" x2="14" y2="12" />
+              </svg>
+              <div style={{ fontSize: '0.62rem', color: dragOver === 'picked_up' ? '#777' : '#2a2a2a', letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8, transition: 'color 0.15s', whiteSpace: 'pre-line' }}>
+                {dragOver === 'picked_up' ? 'Drop to archive' : 'Drag here\nwhen picked up'}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
 
   // ── SUCCESS ───────────────────────────────────────────────────────────────
   if (success) {
@@ -471,9 +455,9 @@ export default function App() {
             <textarea
               style={{ ...inp, height: 'auto', minHeight: 100, padding: '0.75rem 0.85rem', resize: 'vertical', borderColor: errors.order_text ? '#cc0000' : B }}
               value={form.order_text}
-              placeholder="e.g. 2kg boerewors, 1kg biltong (sliced thin), 0.5kg droëwors"
+              placeholder="e.g. 2kg boerewors, 1kg biltong (sliced thin), 0.5kg droewors"
               onChange={e => setForm(f => ({ ...f, order_text: e.target.value }))} />
-            {errors.order_text && <div style={{ fontSize: '0.72rem', color: '#cc0000', marginTop: '0.35rem', fontWeight: 700 }}>Please tell us what you'd like to order.</div>}
+            {errors.order_text && <div style={{ fontSize: '0.72rem', color: '#cc0000', marginTop: '0.35rem', fontWeight: 700 }}>Please tell us what you would like to order.</div>}
           </div>
 
           <div style={{ borderTop: '1px solid #eee', margin: '1.5rem 0' }} />
