@@ -14,17 +14,7 @@ const COLS = [
   { id: 'ready',     label: 'Ready for Pickup', short: 'READY', bg: '#1a4a1a', fg: W },
 ];
 
-const inp = {
-  display: 'block', width: '100%', height: 48, border: BORDER,
-  background: W, color: B, fontFamily: FONT, fontSize: '0.95rem',
-  fontWeight: 600, padding: '0 0.85rem', boxSizing: 'border-box',
-  outline: 'none', borderRadius: 0, appearance: 'none', WebkitAppearance: 'none',
-};
-
-const lbl = {
-  display: 'block', fontSize: '0.68rem', fontWeight: 800,
-  letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.4rem', color: B,
-};
+const FONT_FAMILY = '"DM Sans", sans-serif';
 
 const btnBlack = {
   display: 'block', width: '100%', height: 54, background: B, color: W,
@@ -32,22 +22,22 @@ const btnBlack = {
   letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: 0,
 };
 
-function Logo({ dark = false }) {
+function Logo({ dark = false, small = false }) {
   const color = dark ? '#aaa' : B;
   const line  = dark ? '#444' : B;
   if (LOGO_URL) {
     return (
-      <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+      <div style={{ textAlign: 'center', marginBottom: small ? '0.5rem' : '1.75rem' }}>
         <img src={LOGO_URL} alt="Dry Age Biltong"
-          style={{ height: 120, width: 'auto', filter: dark ? 'invert(1)' : 'none' }} />
+          style={{ height: small ? 44 : 120, width: 'auto', filter: dark ? 'invert(1)' : 'none' }} />
       </div>
     );
   }
   return (
-    <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-      <div style={{ display: 'inline-block', borderBottom: `2.5px solid ${line}`, paddingBottom: '0.4rem' }}>
-        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: '0.72rem', letterSpacing: '4px', textTransform: 'uppercase', color, lineHeight: 1.3 }}>Dry Age</div>
-        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: '0.72rem', letterSpacing: '4px', textTransform: 'uppercase', color, lineHeight: 1.3 }}>Biltong</div>
+    <div style={{ textAlign: 'center', marginBottom: small ? '0.5rem' : '1.75rem' }}>
+      <div style={{ display: 'inline-block', borderBottom: `2.5px solid ${line}`, paddingBottom: '0.3rem' }}>
+        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: small ? '0.6rem' : '0.72rem', letterSpacing: '4px', textTransform: 'uppercase', color, lineHeight: 1.3 }}>Dry Age</div>
+        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: small ? '0.6rem' : '0.72rem', letterSpacing: '4px', textTransform: 'uppercase', color, lineHeight: 1.3 }}>Biltong</div>
       </div>
     </div>
   );
@@ -125,7 +115,8 @@ export default function App() {
   const [pinError, setPinError]           = useState('');
   const [pinLoading, setPinLoading]       = useState(false);
   const [isMobile, setIsMobile]           = useState(window.innerWidth <= 768);
-  const dragId = useRef(null);
+  const dragId    = useRef(null);
+  const touchDragId = useRef(null);
 
   const [form, setForm] = useState({
     name: '', phone: '', order_text: '', pickup: '', notes: '',
@@ -196,7 +187,6 @@ export default function App() {
     callAPI('/api/delete-order', { method: 'DELETE', body: { id } }, pin);
   }
 
-  // ── Desktop drag ──────────────────────────────────────────────────────────
   function onDragStart(e, id) { dragId.current = id; e.dataTransfer.effectAllowed = 'move'; }
   function onDragOver(e, col) { e.preventDefault(); setDragOver(col); }
   function onDrop(e, col) {
@@ -205,13 +195,7 @@ export default function App() {
     dragId.current = null; setDragOver(null);
   }
 
-  // ── Touch drag (mobile) ───────────────────────────────────────────────────
-  const touchDragId = useRef(null);
-
-  function onTouchStart(e, id) {
-    touchDragId.current = id;
-  }
-
+  function onTouchStart(e, id) { touchDragId.current = id; }
   function onTouchMove(e) {
     if (!touchDragId.current) return;
     e.preventDefault();
@@ -220,18 +204,38 @@ export default function App() {
     const col = el?.closest('[data-col-id]');
     setDragOver(col ? col.getAttribute('data-col-id') : null);
   }
-
   function onTouchEnd(e) {
     if (!touchDragId.current) return;
     const touch = e.changedTouches[0];
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
     const col = el?.closest('[data-col-id]');
     if (col) move(touchDragId.current, col.getAttribute('data-col-id'));
-    touchDragId.current = null;
-    setDragOver(null);
+    touchDragId.current = null; setDragOver(null);
   }
 
   const today = new Date().toISOString().split('T')[0];
+
+  // Mobile form styles — compact enough to fit one screen
+  const m = isMobile;
+  const inp = {
+    display: 'block', width: '100%',
+    height: m ? 38 : 48,
+    border: BORDER, background: W, color: B,
+    fontFamily: FONT_FAMILY,
+    fontSize: m ? '0.85rem' : '0.95rem',
+    fontWeight: 600,
+    padding: m ? '0 0.7rem' : '0 0.85rem',
+    boxSizing: 'border-box', outline: 'none', borderRadius: 0,
+    appearance: 'none', WebkitAppearance: 'none',
+  };
+  const lbl = {
+    display: 'block',
+    fontSize: m ? '0.6rem' : '0.68rem',
+    fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase',
+    marginBottom: m ? '0.25rem' : '0.4rem', color: B,
+  };
+  const fieldGap   = m ? '0.55rem' : '1.1rem';
+  const dividerGap = m ? '0.6rem' : '1.5rem';
 
   // ── PIN ENTRY ─────────────────────────────────────────────────────────────
   if (view === 'staff' && !pin) {
@@ -331,21 +335,18 @@ export default function App() {
   if (view === 'staff' && pin) {
     const activeOrders = orders.filter(o => o.status !== 'picked_up');
     const gridCols = isMobile ? '1fr' : 'repeat(4, minmax(220px, 1fr))';
-
     return (
       <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box', width: '100%' }}>
         <StaffHeader orders={orders} onRefresh={loadOrders}
           onLock={() => { setPin(''); setView('customer'); }}
           archiveView={archiveView} setArchiveView={setArchiveView} />
-
         <div style={{ width: '100%', overflowX: isMobile ? 'visible' : 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '0.65rem', minWidth: isMobile ? 'auto' : '880px' }}>
             {COLS.map(col => {
               const cards = activeOrders.filter(o => o.status === col.id);
               const over  = dragOver === col.id;
               return (
-                <div key={col.id}
-                  data-col-id={col.id}
+                <div key={col.id} data-col-id={col.id}
                   style={{ background: over ? '#1c1c1c' : '#161616', border: over ? '2px dashed #555' : '2px solid #222', minHeight: isMobile ? 'auto' : 420, display: 'flex', flexDirection: 'column' }}
                   onDragOver={e => onDragOver(e, col.id)}
                   onDrop={e => onDrop(e, col.id)}
@@ -377,9 +378,7 @@ export default function App() {
                             onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
                             onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
                         </div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: W, lineHeight: 1.5, marginBottom: '0.55rem', whiteSpace: 'pre-wrap' }}>
-                          {o.order_text}
-                        </div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: W, lineHeight: 1.5, marginBottom: '0.55rem', whiteSpace: 'pre-wrap' }}>{o.order_text}</div>
                         <div style={{ borderTop: '1px solid #252525', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
                             <div style={{ fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>Pickup</div>
@@ -387,11 +386,7 @@ export default function App() {
                           </div>
                           <div style={{ fontSize: '0.58rem', color: '#444' }}>{formatTime(o.created_at)}</div>
                         </div>
-                        {o.notes && (
-                          <div style={{ fontSize: '0.72rem', color: '#666', fontStyle: 'italic', borderTop: '1px solid #252525', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
-                            {o.notes}
-                          </div>
-                        )}
+                        {o.notes && <div style={{ fontSize: '0.72rem', color: '#666', fontStyle: 'italic', borderTop: '1px solid #252525', paddingTop: '0.4rem', marginTop: '0.4rem' }}>{o.notes}</div>}
                         <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
                           {COLS.filter(c => c.id !== col.id).map(c => (
                             <button key={c.id} onClick={() => move(o.id, c.id)}
@@ -414,11 +409,8 @@ export default function App() {
                 </div>
               );
             })}
-
-            {/* Archive drop column */}
-            <div
-              data-col-id="picked_up"
-              style={{ background: dragOver === 'picked_up' ? '#1a1a1a' : '#141414', border: dragOver === 'picked_up' ? '2px dashed #888' : '2px dashed #222', minHeight: isMobile ? 120 : 420, display: 'flex', flexDirection: 'column', transition: 'all 0.15s' }}
+            <div data-col-id="picked_up"
+              style={{ background: dragOver === 'picked_up' ? '#1a1a1a' : '#141414', border: dragOver === 'picked_up' ? '2px dashed #888' : '2px dashed #222', minHeight: isMobile ? 100 : 420, display: 'flex', flexDirection: 'column', transition: 'all 0.15s' }}
               onDragOver={e => onDragOver(e, 'picked_up')}
               onDrop={e => onDrop(e, 'picked_up')}
               onDragLeave={() => setDragOver(null)}>
@@ -430,18 +422,16 @@ export default function App() {
               </div>
               <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', padding: isMobile ? '1rem' : '2rem' }}>
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                  stroke={dragOver === 'picked_up' ? '#888' : '#2a2a2a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ transition: 'stroke 0.15s', flexShrink: 0 }}>
+                  stroke={dragOver === 'picked_up' ? '#888' : '#2a2a2a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                   <polyline points="21 8 21 21 3 21 3 8" />
                   <rect x="1" y="3" width="22" height="5" />
                   <line x1="10" y1="12" x2="14" y2="12" />
                 </svg>
-                <div style={{ fontSize: '0.62rem', color: dragOver === 'picked_up' ? '#777' : '#2a2a2a', letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8, transition: 'color 0.15s' }}>
+                <div style={{ fontSize: '0.62rem', color: dragOver === 'picked_up' ? '#777' : '#2a2a2a', letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8 }}>
                   {isMobile ? 'Tap DONE on a card to archive' : (dragOver === 'picked_up' ? 'Drop to archive' : 'Drag here\nwhen picked up')}
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </div>
@@ -451,18 +441,18 @@ export default function App() {
   // ── SUCCESS ───────────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
+      <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: m ? '1rem' : '2rem 1rem' }}>
         <div style={{ maxWidth: 440, width: '100%' }}>
-          <Logo />
-          <div style={{ background: W, border: BORDER, padding: '3rem 2rem', textAlign: 'center' }}>
-            <div style={{ width: 52, height: 52, background: B, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem', color: W, fontSize: '1.4rem', fontWeight: 900 }}>✓</div>
-            <div style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Order Placed</div>
-            <p style={{ fontSize: '0.88rem', color: '#666', marginBottom: '2rem', lineHeight: 1.6 }}>
-              We've received your order and sent you a confirmation text. We'll SMS you again when it's ready for pickup.
+          <Logo small={m} />
+          <div style={{ background: W, border: BORDER, padding: m ? '1.5rem 1rem' : '3rem 2rem', textAlign: 'center' }}>
+            <div style={{ width: 44, height: 44, background: B, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', color: W, fontSize: '1.2rem', fontWeight: 900 }}>✓</div>
+            <div style={{ fontSize: m ? '1rem' : '1.2rem', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Order Placed</div>
+            <p style={{ fontSize: '0.82rem', color: '#666', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              We've received your order and sent you a confirmation text. We'll SMS you when it's ready.
             </p>
-            <button style={btnBlack} onClick={() => setSuccess(false)}>Place Another Order</button>
+            <button style={{ ...btnBlack, height: m ? 46 : 54 }} onClick={() => setSuccess(false)}>Place Another Order</button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+          <div style={{ textAlign: 'center', marginTop: m ? '0.75rem' : '2rem' }}>
             <span onClick={() => setView('staff')} style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#ccc', cursor: 'pointer' }}>
               Staff View
             </span>
@@ -474,69 +464,71 @@ export default function App() {
 
   // ── CUSTOMER FORM ─────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', padding: '2rem 1rem', boxSizing: 'border-box' }}>
+    <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', padding: m ? '0.5rem' : '2rem 1rem', boxSizing: 'border-box' }}>
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
-        <Logo />
-        <div style={{ background: W, border: BORDER, padding: '2rem' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.3px', marginBottom: '0.2rem' }}>Place an Order</div>
-          <div style={{ fontSize: '0.78rem', color: '#888', marginBottom: '1.75rem' }}>Fresh pickup orders — Perth store only.</div>
+        <Logo small={m} />
+        <div style={{ background: W, border: BORDER, padding: m ? '0.85rem 0.85rem' : '2rem' }}>
 
-          <div style={{ marginBottom: '1.1rem' }}>
+          <div style={{ fontSize: m ? '1.05rem' : '1.4rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.3px', marginBottom: m ? '0.1rem' : '0.2rem' }}>Place an Order</div>
+          {!m && <div style={{ fontSize: '0.78rem', color: '#888', marginBottom: '1.75rem' }}>Fresh pickup orders — Perth store only.</div>}
+          {m && <div style={{ marginBottom: '0.65rem' }} />}
+
+          <div style={{ marginBottom: fieldGap }}>
             <label style={lbl}>Your Name</label>
             <input style={{ ...inp, borderColor: errors.name ? '#cc0000' : B }}
               value={form.name} placeholder="Full name"
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
 
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: fieldGap }}>
             <label style={lbl}>Phone / WhatsApp</label>
             <input style={{ ...inp, borderColor: errors.phone ? '#cc0000' : B }}
               value={form.phone} placeholder="04XX XXX XXX" type="tel"
               onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-            <div style={{ fontSize: '0.68rem', color: '#aaa', marginTop: '0.3rem' }}>We'll text you when your order is ready.</div>
+            {!m && <div style={{ fontSize: '0.68rem', color: '#aaa', marginTop: '0.3rem' }}>We'll text you when your order is ready.</div>}
           </div>
 
-          <div style={{ borderTop: '1px solid #eee', margin: '1.5rem 0' }} />
+          <div style={{ borderTop: '1px solid #eee', margin: `${dividerGap} 0` }} />
 
-          <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ marginBottom: fieldGap }}>
             <label style={lbl}>What would you like?</label>
-            <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: '0.5rem' }}>Make sure to include quantity in kg.</div>
+            {!m && <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: '0.5rem' }}>Make sure to include quantity in kg.</div>}
             <textarea
-              style={{ ...inp, height: 'auto', minHeight: 100, padding: '0.75rem 0.85rem', resize: 'vertical', borderColor: errors.order_text ? '#cc0000' : B }}
+              style={{ ...inp, height: 'auto', minHeight: m ? 55 : 100, padding: '0.6rem 0.7rem', resize: 'vertical', borderColor: errors.order_text ? '#cc0000' : B }}
               value={form.order_text}
-              placeholder="e.g. 2kg boerewors, 1kg biltong (sliced thin), 0.5kg droewors"
+              placeholder={m ? 'e.g. 2kg boerewors, 1kg biltong — include kg' : 'e.g. 2kg boerewors, 1kg biltong (sliced thin)'}
               onChange={e => setForm(f => ({ ...f, order_text: e.target.value }))} />
-            {errors.order_text && <div style={{ fontSize: '0.72rem', color: '#cc0000', marginTop: '0.35rem', fontWeight: 700 }}>Please tell us what you would like to order.</div>}
+            {errors.order_text && <div style={{ fontSize: '0.7rem', color: '#cc0000', marginTop: '0.25rem', fontWeight: 700 }}>Please tell us what you would like.</div>}
           </div>
 
-          <div style={{ borderTop: '1px solid #eee', margin: '1.5rem 0' }} />
+          <div style={{ borderTop: '1px solid #eee', margin: `${dividerGap} 0` }} />
 
-          <div style={{ marginBottom: '1.1rem' }}>
+          <div style={{ marginBottom: fieldGap }}>
             <label style={lbl}>Pickup Date</label>
             <input type="date" style={{ ...inp, borderColor: errors.pickup ? '#cc0000' : B }}
               value={form.pickup} min={today}
               onChange={e => setForm(f => ({ ...f, pickup: e.target.value }))} />
           </div>
 
-          <div style={{ marginBottom: '1.75rem' }}>
+          <div style={{ marginBottom: m ? '0.65rem' : '1.75rem' }}>
             <label style={lbl}>Notes (optional)</label>
-            <textarea style={{ ...inp, height: 'auto', minHeight: 80, padding: '0.75rem 0.85rem', resize: 'vertical' }}
-              value={form.notes} placeholder="Any special requests or cut preferences..."
+            <textarea style={{ ...inp, height: 'auto', minHeight: m ? 42 : 80, padding: '0.6rem 0.7rem', resize: 'vertical' }}
+              value={form.notes} placeholder="Any special requests..."
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
 
           {Object.keys(errors).filter(k => k !== 'order_text').length > 0 && (
-            <div style={{ fontSize: '0.75rem', color: '#cc0000', fontWeight: 700, marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.72rem', color: '#cc0000', fontWeight: 700, marginBottom: '0.5rem' }}>
               Please fill in all required fields.
             </div>
           )}
 
-          <button style={{ ...btnBlack, opacity: submitting ? 0.6 : 1 }} onClick={submit} disabled={submitting}>
+          <button style={{ ...btnBlack, height: m ? 44 : 54, fontSize: m ? '0.78rem' : '0.82rem', opacity: submitting ? 0.6 : 1 }} onClick={submit} disabled={submitting}>
             {submitting ? 'Placing Order...' : 'Place Order'}
           </button>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: '1.75rem' }}>
+        <div style={{ textAlign: 'center', marginTop: m ? '0.5rem' : '1.75rem', paddingBottom: m ? '0.5rem' : 0 }}>
           <span onClick={() => setView('staff')}
             style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
             Staff View
