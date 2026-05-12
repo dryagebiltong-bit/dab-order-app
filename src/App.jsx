@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-// ── Logo ──────────────────────────────────────────────────────────────────────
 const LOGO_URL = 'https://staging4.dryagebiltong.com.au/wp-content/uploads/2026/05/download.png';
-// ─────────────────────────────────────────────────────────────────────────────
 
 const B      = '#0a0a0a';
 const W      = '#ffffff';
@@ -126,11 +124,18 @@ export default function App() {
   const [pinInput, setPinInput]           = useState('');
   const [pinError, setPinError]           = useState('');
   const [pinLoading, setPinLoading]       = useState(false);
+  const [isMobile, setIsMobile]           = useState(window.innerWidth <= 768);
   const dragId = useRef(null);
 
   const [form, setForm] = useState({
     name: '', phone: '', order_text: '', pickup: '', notes: '',
   });
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   useEffect(() => {
     if (view === 'staff' && pin) loadOrders();
@@ -191,12 +196,39 @@ export default function App() {
     loadOrders();
   }
 
+  // ── Desktop drag ──────────────────────────────────────────────────────────
   function onDragStart(e, id) { dragId.current = id; e.dataTransfer.effectAllowed = 'move'; }
   function onDragOver(e, col) { e.preventDefault(); setDragOver(col); }
   function onDrop(e, col) {
     e.preventDefault();
     if (dragId.current) move(dragId.current, col);
     dragId.current = null; setDragOver(null);
+  }
+
+  // ── Touch drag (mobile) ───────────────────────────────────────────────────
+  const touchDragId = useRef(null);
+
+  function onTouchStart(e, id) {
+    touchDragId.current = id;
+  }
+
+  function onTouchMove(e) {
+    if (!touchDragId.current) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const col = el?.closest('[data-col-id]');
+    setDragOver(col ? col.getAttribute('data-col-id') : null);
+  }
+
+  function onTouchEnd(e) {
+    if (!touchDragId.current) return;
+    const touch = e.changedTouches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const col = el?.closest('[data-col-id]');
+    if (col) move(touchDragId.current, col.getAttribute('data-col-id'));
+    touchDragId.current = null;
+    setDragOver(null);
   }
 
   const today = new Date().toISOString().split('T')[0];
@@ -249,7 +281,7 @@ export default function App() {
               style={{ display: 'block', width: '100%', height: 48, background: '#161616', border: '1px solid #333', color: W, fontFamily: FONT, fontSize: '0.9rem', fontWeight: 500, padding: '0 2.5rem 0 1rem', boxSizing: 'border-box', outline: 'none', borderRadius: 0 }} />
             {archiveSearch && (
               <button onClick={() => setArchiveSearch('')}
-                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
+                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0 }}
                 onMouseEnter={e => e.currentTarget.style.color = '#aaa'}
                 onMouseLeave={e => e.currentTarget.style.color = '#555'}>×</button>
             )}
@@ -265,7 +297,7 @@ export default function App() {
           {archived.map(o => (
             <div key={o.id} style={{ background: '#161616', border: '1px solid #222', padding: '1rem 1.25rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'baseline', marginBottom: '0.35rem' }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'baseline', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
                   <div style={{ fontWeight: 900, fontSize: '0.9rem' }}>{o.name}</div>
                   <div style={{ fontSize: '0.72rem', color: '#666' }}>{o.phone}</div>
                 </div>
@@ -284,7 +316,7 @@ export default function App() {
                   Restore
                 </button>
                 <button onClick={() => del(o.id)}
-                  style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.25rem', fontFamily: FONT }}
+                  style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.25rem' }}
                   onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
                   onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
               </div>
@@ -298,102 +330,119 @@ export default function App() {
   // ── STAFF BOARD ───────────────────────────────────────────────────────────
   if (view === 'staff' && pin) {
     const activeOrders = orders.filter(o => o.status !== 'picked_up');
+    const gridCols = isMobile ? '1fr' : 'repeat(4, minmax(220px, 1fr))';
+
     return (
-      <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box' }}>
+      <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box', width: '100%' }}>
         <StaffHeader orders={orders} onRefresh={loadOrders}
           onLock={() => { setPin(''); setView('customer'); }}
           archiveView={archiveView} setArchiveView={setArchiveView} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(200px, 1fr))', gap: '0.65rem', overflowX: 'auto' }}>
-          {COLS.map(col => {
-            const cards = activeOrders.filter(o => o.status === col.id);
-            const over  = dragOver === col.id;
-            return (
-              <div key={col.id}
-                style={{ background: over ? '#1c1c1c' : '#161616', border: over ? '2px dashed #555' : '2px solid #222', minHeight: 420, display: 'flex', flexDirection: 'column' }}
-                onDragOver={e => onDragOver(e, col.id)}
-                onDrop={e => onDrop(e, col.id)}
-                onDragLeave={() => setDragOver(null)}>
-                <div style={{ background: col.bg, padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: col.fg }}>{col.label}</span>
-                  <span style={{ background: 'rgba(255,255,255,0.18)', color: W, fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>{cards.length}</span>
-                </div>
-                <div style={{ padding: '0.65rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-                  {cards.length === 0 && (
-                    <div style={{ textAlign: 'center', color: '#2a2a2a', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '2.5rem' }}>Empty</div>
-                  )}
-                  {cards.map(o => (
-                    <div key={o.id} draggable onDragStart={e => onDragStart(e, o.id)}
-                      style={{ background: '#1e1e1e', border: '1px solid #2e2e2e', padding: '0.85rem', cursor: 'grab', userSelect: 'none' }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = '#555'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = '#2e2e2e'}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.55rem' }}>
-                        <div>
-                          <div style={{ fontWeight: 900, fontSize: '0.9rem', marginBottom: 2 }}>{o.name}</div>
-                          <div style={{ fontSize: '0.72rem', color: '#777' }}>{o.phone}</div>
+
+        <div style={{ width: '100%', overflowX: isMobile ? 'visible' : 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '0.65rem', minWidth: isMobile ? 'auto' : '880px' }}>
+            {COLS.map(col => {
+              const cards = activeOrders.filter(o => o.status === col.id);
+              const over  = dragOver === col.id;
+              return (
+                <div key={col.id}
+                  data-col-id={col.id}
+                  style={{ background: over ? '#1c1c1c' : '#161616', border: over ? '2px dashed #555' : '2px solid #222', minHeight: isMobile ? 'auto' : 420, display: 'flex', flexDirection: 'column' }}
+                  onDragOver={e => onDragOver(e, col.id)}
+                  onDrop={e => onDrop(e, col.id)}
+                  onDragLeave={() => setDragOver(null)}>
+                  <div style={{ background: col.bg, padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: col.fg }}>{col.label}</span>
+                    <span style={{ background: 'rgba(255,255,255,0.18)', color: W, fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>{cards.length}</span>
+                  </div>
+                  <div style={{ padding: '0.65rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                    {cards.length === 0 && (
+                      <div style={{ textAlign: 'center', color: '#2a2a2a', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '1.5rem', marginBottom: '1.5rem' }}>Empty</div>
+                    )}
+                    {cards.map(o => (
+                      <div key={o.id} draggable
+                        onDragStart={e => onDragStart(e, o.id)}
+                        onTouchStart={e => onTouchStart(e, o.id)}
+                        onTouchMove={onTouchMove}
+                        onTouchEnd={onTouchEnd}
+                        style={{ background: '#1e1e1e', border: '1px solid #2e2e2e', padding: '0.85rem', cursor: isMobile ? 'pointer' : 'grab', userSelect: 'none', touchAction: 'none' }}
+                        onMouseEnter={e => !isMobile && (e.currentTarget.style.borderColor = '#555')}
+                        onMouseLeave={e => !isMobile && (e.currentTarget.style.borderColor = '#2e2e2e')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.55rem' }}>
+                          <div>
+                            <div style={{ fontWeight: 900, fontSize: '0.9rem', marginBottom: 2 }}>{o.name}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#777' }}>{o.phone}</div>
+                          </div>
+                          <button onClick={() => del(o.id)}
+                            style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
                         </div>
-                        <button onClick={() => del(o.id)}
-                          style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
-                          onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
-                          onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
-                      </div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: W, lineHeight: 1.5, marginBottom: '0.55rem', whiteSpace: 'pre-wrap' }}>
-                        {o.order_text}
-                      </div>
-                      <div style={{ borderTop: '1px solid #252525', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>Pickup</div>
-                          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#bbb' }}>{formatPickup(o.pickup)}</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: W, lineHeight: 1.5, marginBottom: '0.55rem', whiteSpace: 'pre-wrap' }}>
+                          {o.order_text}
                         </div>
-                        <div style={{ fontSize: '0.58rem', color: '#444' }}>{formatTime(o.created_at)}</div>
-                      </div>
-                      {o.notes && (
-                        <div style={{ fontSize: '0.72rem', color: '#666', fontStyle: 'italic', borderTop: '1px solid #252525', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
-                          {o.notes}
+                        <div style={{ borderTop: '1px solid #252525', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>Pickup</div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#bbb' }}>{formatPickup(o.pickup)}</div>
+                          </div>
+                          <div style={{ fontSize: '0.58rem', color: '#444' }}>{formatTime(o.created_at)}</div>
                         </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
-                        {COLS.filter(c => c.id !== col.id).map(c => (
-                          <button key={c.id} onClick={() => move(o.id, c.id)}
+                        {o.notes && (
+                          <div style={{ fontSize: '0.72rem', color: '#666', fontStyle: 'italic', borderTop: '1px solid #252525', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
+                            {o.notes}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
+                          {COLS.filter(c => c.id !== col.id).map(c => (
+                            <button key={c.id} onClick={() => move(o.id, c.id)}
+                              style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2e2e2e'; e.currentTarget.style.color = '#555'; }}>
+                              {c.short}
+                            </button>
+                          ))}
+                          <button onClick={() => move(o.id, 'picked_up')}
                             style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#2e2e2e'; e.currentTarget.style.color = '#555'; }}>
-                            {c.short}
+                            DONE
                           </button>
-                        ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Archive drop column */}
+            <div
+              data-col-id="picked_up"
+              style={{ background: dragOver === 'picked_up' ? '#1a1a1a' : '#141414', border: dragOver === 'picked_up' ? '2px dashed #888' : '2px dashed #222', minHeight: isMobile ? 120 : 420, display: 'flex', flexDirection: 'column', transition: 'all 0.15s' }}
+              onDragOver={e => onDragOver(e, 'picked_up')}
+              onDrop={e => onDrop(e, 'picked_up')}
+              onDragLeave={() => setDragOver(null)}>
+              <div style={{ background: '#1a1a1a', padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: dragOver === 'picked_up' ? '#888' : '#444' }}>Order Picked Up</span>
+                <span style={{ background: 'rgba(255,255,255,0.05)', color: '#444', fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>
+                  {orders.filter(o => o.status === 'picked_up').length}
+                </span>
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', padding: isMobile ? '1rem' : '2rem' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                  stroke={dragOver === 'picked_up' ? '#888' : '#2a2a2a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ transition: 'stroke 0.15s', flexShrink: 0 }}>
+                  <polyline points="21 8 21 21 3 21 3 8" />
+                  <rect x="1" y="3" width="22" height="5" />
+                  <line x1="10" y1="12" x2="14" y2="12" />
+                </svg>
+                <div style={{ fontSize: '0.62rem', color: dragOver === 'picked_up' ? '#777' : '#2a2a2a', letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8, transition: 'color 0.15s' }}>
+                  {isMobile ? 'Tap DONE on a card to archive' : (dragOver === 'picked_up' ? 'Drop to archive' : 'Drag here\nwhen picked up')}
                 </div>
               </div>
-            );
-          })}
+            </div>
 
-          {/* Archive drop column */}
-          <div
-            style={{ background: dragOver === 'picked_up' ? '#1a1a1a' : '#141414', border: dragOver === 'picked_up' ? '2px dashed #888' : '2px dashed #222', minHeight: 420, display: 'flex', flexDirection: 'column', transition: 'all 0.15s' }}
-            onDragOver={e => onDragOver(e, 'picked_up')}
-            onDrop={e => onDrop(e, 'picked_up')}
-            onDragLeave={() => setDragOver(null)}>
-            <div style={{ background: '#1a1a1a', padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: dragOver === 'picked_up' ? '#888' : '#444' }}>Order Picked Up</span>
-              <span style={{ background: 'rgba(255,255,255,0.05)', color: '#444', fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>
-                {orders.filter(o => o.status === 'picked_up').length}
-              </span>
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', padding: '2rem' }}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
-                stroke={dragOver === 'picked_up' ? '#888' : '#2a2a2a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{ transition: 'stroke 0.15s' }}>
-                <polyline points="21 8 21 21 3 21 3 8" />
-                <rect x="1" y="3" width="22" height="5" />
-                <line x1="10" y1="12" x2="14" y2="12" />
-              </svg>
-              <div style={{ fontSize: '0.62rem', color: dragOver === 'picked_up' ? '#777' : '#2a2a2a', letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8, transition: 'color 0.15s', whiteSpace: 'pre-line' }}>
-                {dragOver === 'picked_up' ? 'Drop to archive' : 'Drag here\nwhen picked up'}
-              </div>
-            </div>
           </div>
-
         </div>
       </div>
     );
