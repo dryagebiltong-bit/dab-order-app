@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-const LOGO_URL = 'https://staging4.dryagebiltong.com.au/wp-content/uploads/2026/05/download.png';
+const LOGO_URL = 'https://dryagebiltong.com.au/wp-content/uploads/2026/05/download.png';
 
 const B      = '#0a0a0a';
 const W      = '#ffffff';
