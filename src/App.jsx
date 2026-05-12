@@ -130,6 +130,7 @@ export default function App() {
   const [pinInput, setPinInput]     = useState('');
   const [pinError, setPinError]     = useState('');
   const [pinLoading, setPinLoading] = useState(false);
+  const [archiveSearch, setArchiveSearch] = useState('');
   const dragId = useRef(null);
 
   const [form, setForm] = useState({
@@ -252,9 +253,13 @@ export default function App() {
     );
   }
 
-  // ── ARCHIVE VIEW ──────────────────────────────────────────────────────────
+// ── ARCHIVE VIEW ──────────────────────────────────────────────────────────
   if (view === 'staff' && pin && archiveView) {
-    const archived = orders.filter(o => o.status === 'picked_up')
+    const q = archiveSearch.toLowerCase().trim();
+    const archived = orders
+      .filter(o => o.status === 'picked_up')
+      .filter(o => !q || [o.name, o.phone, o.order_text, o.notes, o.pickup]
+        .some(f => (f || '').toLowerCase().includes(q)))
       .sort((a, b) => b.created_at - a.created_at);
 
     return (
@@ -264,11 +269,37 @@ export default function App() {
           archiveView={archiveView} setArchiveView={setArchiveView} />
 
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
+            <input
+              type="text"
+              placeholder="Search by name, phone, item, date…"
+              value={archiveSearch}
+              onChange={e => setArchiveSearch(e.target.value)}
+              style={{
+                display: 'block', width: '100%', height: 48,
+                background: '#161616', border: '1px solid #333', color: W,
+                fontFamily: FONT, fontSize: '0.9rem', fontWeight: 500,
+                padding: '0 2.5rem 0 1rem', boxSizing: 'border-box',
+                outline: 'none', borderRadius: 0,
+              }} />
+            {archiveSearch && (
+              <button onClick={() => setArchiveSearch('')}
+                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
+                onMouseEnter={e => e.currentTarget.style.color = '#aaa'}
+                onMouseLeave={e => e.currentTarget.style.color = '#555'}>×</button>
+            )}
+          </div>
+
+          <div style={{ fontSize: '0.62rem', color: '#444', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+            {q ? `${archived.length} result${archived.length !== 1 ? 's' : ''} for "${archiveSearch}"` : `${archived.length} orders`}
+          </div>
+
           {archived.length === 0 && (
             <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4rem' }}>
-              No picked up orders yet
+              {q ? 'No matching orders' : 'No picked up orders yet'}
             </div>
           )}
+
           {archived.map(o => (
             <div key={o.id} style={{ background: '#161616', border: '1px solid #222', padding: '1rem 1.25rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
               <div style={{ flex: 1 }}>
@@ -277,7 +308,7 @@ export default function App() {
                   <div style={{ fontSize: '0.72rem', color: '#666' }}>{o.phone}</div>
                 </div>
                 <div style={{ fontSize: '0.82rem', color: '#aaa', marginBottom: '0.35rem', lineHeight: 1.4 }}>{o.order_text}</div>
-                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                   <div style={{ fontSize: '0.68rem', color: '#555' }}>Pickup: {formatPickup(o.pickup)}</div>
                   <div style={{ fontSize: '0.68rem', color: '#444' }}>Ordered: {formatTime(o.created_at)}</div>
                 </div>
@@ -301,7 +332,6 @@ export default function App() {
       </div>
     );
   }
-
   // ── STAFF BOARD ───────────────────────────────────────────────────────────
   if (view === 'staff' && pin) {
     const activeOrders = orders.filter(o => o.status !== 'picked_up');
