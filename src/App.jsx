@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 
-// Paste your logo image URL here, or leave empty for the text logo
-const LOGO_URL = '';
+// ── Logo ──────────────────────────────────────────────────────────────────────
+const LOGO_URL = 'https://dryagebiltong.com.au/wp-content/uploads/2026/05/dry-age-biltong-square-logo-512.png';
+// ─────────────────────────────────────────────────────────────────────────────
 
 const B      = '#0a0a0a';
 const W      = '#ffffff';
@@ -9,12 +10,14 @@ const G      = '#f8f8f8';
 const BORDER = `2px solid ${B}`;
 const FONT   = '"DM Sans", sans-serif';
 
+// Main board columns — picked_up is archived, not shown here
 const COLS = [
   { id: 'received',  label: 'Order Received',  short: 'NEW',   bg: B,         fg: W },
   { id: 'preparing', label: 'Preparing',        short: 'PREP',  bg: '#1a3a5c', fg: W },
   { id: 'ready',     label: 'Ready for Pickup', short: 'READY', bg: '#1a4a1a', fg: W },
-  { id: 'picked_up', label: 'Picked Up',        short: 'DONE',  bg: '#666',    fg: W },
 ];
+
+const ALL_STATUSES = ['received', 'preparing', 'ready', 'picked_up'];
 
 const inp = {
   display: 'block', width: '100%', height: 48, border: BORDER,
@@ -80,20 +83,53 @@ async function callAPI(path, options = {}, pin = null) {
   return { ok: res.ok, status: res.status, data: await res.json() };
 }
 
+function StaffHeader({ orders, onRefresh, onLock, archiveView, setArchiveView }) {
+  const active   = orders.filter(o => o.status !== 'picked_up').length;
+  const archived = orders.filter(o => o.status === 'picked_up').length;
+
+  const headerBtn = {
+    background: 'none', border: '1px solid #333', color: '#666', fontFamily: FONT,
+    fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase',
+    padding: '0.35rem 0.65rem', cursor: 'pointer',
+  };
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <Logo dark />
+        <div>
+          <div style={{ fontSize: '0.58rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>
+            {archiveView ? 'Picked Up Orders' : 'Order Board'}
+          </div>
+          <div style={{ fontSize: '0.7rem', color: '#555' }}>
+            {archiveView ? `${archived} orders` : `${active} active orders`}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <button onClick={() => setArchiveView(v => !v)}
+          style={{ ...headerBtn, borderColor: archiveView ? '#666' : '#333', color: archiveView ? '#aaa' : '#666' }}>
+          {archiveView ? '← Live Board' : `Archive (${archived})`}
+        </button>
+        <button onClick={onRefresh} style={headerBtn}>Refresh</button>
+        <button onClick={onLock} style={headerBtn}>Lock</button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView]             = useState('customer');
   const [orders, setOrders]         = useState([]);
+  const [archiveView, setArchiveView] = useState(false);
   const [success, setSuccess]       = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors]         = useState({});
   const [dragOver, setDragOver]     = useState(null);
-
-  // Staff auth state - PIN lives only in memory, never in source code
   const [pin, setPin]               = useState('');
   const [pinInput, setPinInput]     = useState('');
   const [pinError, setPinError]     = useState('');
   const [pinLoading, setPinLoading] = useState(false);
-
   const dragId = useRef(null);
 
   const [form, setForm] = useState({
@@ -182,7 +218,7 @@ export default function App() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // ── PIN ENTRY ────────────────────────────────────────────────────────────
+  // ── PIN ENTRY ─────────────────────────────────────────────────────────────
   if (view === 'staff' && !pin) {
     return (
       <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
@@ -194,24 +230,14 @@ export default function App() {
             </div>
             <label style={{ ...lbl, color: '#666' }}>PIN</label>
             <input
-              type="password"
-              inputMode="numeric"
-              maxLength={8}
-              value={pinInput}
-              placeholder="Enter PIN"
+              type="password" inputMode="numeric" maxLength={8}
+              value={pinInput} placeholder="Enter PIN"
               onChange={e => { setPinInput(e.target.value); setPinError(''); }}
               onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
               style={{ ...inp, background: '#1e1e1e', border: '2px solid #333', color: W, marginBottom: '1rem' }}
-              autoFocus
-            />
-            {pinError && (
-              <div style={{ fontSize: '0.75rem', color: '#cc4444', fontWeight: 700, marginBottom: '0.75rem' }}>
-                {pinError}
-              </div>
-            )}
-            <button
-              onClick={handlePinSubmit}
-              disabled={pinLoading}
+              autoFocus />
+            {pinError && <div style={{ fontSize: '0.75rem', color: '#cc4444', fontWeight: 700, marginBottom: '0.75rem' }}>{pinError}</div>}
+            <button onClick={handlePinSubmit} disabled={pinLoading}
               style={{ ...btnBlack, opacity: pinLoading ? 0.6 : 1 }}>
               {pinLoading ? 'Checking...' : 'Enter'}
             </button>
@@ -226,27 +252,69 @@ export default function App() {
     );
   }
 
-  // ── STAFF BOARD ──────────────────────────────────────────────────────────
-  if (view === 'staff' && pin) {
+  // ── ARCHIVE VIEW ──────────────────────────────────────────────────────────
+  if (view === 'staff' && pin && archiveView) {
+    const archived = orders.filter(o => o.status === 'picked_up')
+      .sort((a, b) => b.created_at - a.created_at);
+
     return (
       <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Logo dark />
-            <div>
-              <div style={{ fontSize: '0.58rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>Order Board</div>
-              <div style={{ fontSize: '0.7rem', color: '#555' }}>{orders.filter(o => o.status !== 'picked_up').length} active orders</div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={loadOrders} style={{ background: 'none', border: '1px solid #333', color: '#666', fontFamily: FONT, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.65rem', cursor: 'pointer' }}>Refresh</button>
-            <button onClick={() => { setPin(''); setView('customer'); }} style={{ background: 'none', border: '1px solid #333', color: '#666', fontFamily: FONT, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.65rem', cursor: 'pointer' }}>Lock</button>
-          </div>
-        </div>
+        <StaffHeader orders={orders} onRefresh={loadOrders}
+          onLock={() => { setPin(''); setView('customer'); }}
+          archiveView={archiveView} setArchiveView={setArchiveView} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(200px, 1fr))', gap: '0.65rem', overflowX: 'auto' }}>
+        <div style={{ maxWidth: 680, margin: '0 auto' }}>
+          {archived.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4rem' }}>
+              No picked up orders yet
+            </div>
+          )}
+          {archived.map(o => (
+            <div key={o.id} style={{ background: '#161616', border: '1px solid #222', padding: '1rem 1.25rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'baseline', marginBottom: '0.35rem' }}>
+                  <div style={{ fontWeight: 900, fontSize: '0.9rem' }}>{o.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#666' }}>{o.phone}</div>
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#aaa', marginBottom: '0.35rem', lineHeight: 1.4 }}>{o.order_text}</div>
+                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                  <div style={{ fontSize: '0.68rem', color: '#555' }}>Pickup: {formatPickup(o.pickup)}</div>
+                  <div style={{ fontSize: '0.68rem', color: '#444' }}>Ordered: {formatTime(o.created_at)}</div>
+                </div>
+                {o.notes && <div style={{ fontSize: '0.72rem', color: '#555', fontStyle: 'italic', marginTop: '0.25rem' }}>{o.notes}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                <button onClick={() => move(o.id, 'received')}
+                  style={{ background: 'none', border: '1px solid #333', color: '#555', fontFamily: FONT, fontSize: '0.58rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.3rem 0.5rem', cursor: 'pointer' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#555'; }}>
+                  Restore
+                </button>
+                <button onClick={() => del(o.id)}
+                  style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.25rem', fontFamily: FONT }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── STAFF BOARD ───────────────────────────────────────────────────────────
+  if (view === 'staff' && pin) {
+    const activeOrders = orders.filter(o => o.status !== 'picked_up');
+
+    return (
+      <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box' }}>
+        <StaffHeader orders={orders} onRefresh={loadOrders}
+          onLock={() => { setPin(''); setView('customer'); }}
+          archiveView={archiveView} setArchiveView={setArchiveView} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(200px, 1fr))', gap: '0.65rem', overflowX: 'auto' }}>
           {COLS.map(col => {
-            const cards = orders.filter(o => o.status === col.id);
+            const cards = activeOrders.filter(o => o.status === col.id);
             const over  = dragOver === col.id;
             return (
               <div key={col.id}
@@ -293,7 +361,7 @@ export default function App() {
                         </div>
                       )}
                       <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
-                        {COLS.filter(c => c.id !== col.id).map(c => (
+                        {[...COLS.filter(c => c.id !== col.id), { id: 'picked_up', short: 'DONE' }].map(c => (
                           <button key={c.id} onClick={() => move(o.id, c.id)}
                             style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
@@ -313,7 +381,7 @@ export default function App() {
     );
   }
 
-  // ── SUCCESS ──────────────────────────────────────────────────────────────
+  // ── SUCCESS ───────────────────────────────────────────────────────────────
   if (success) {
     return (
       <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
@@ -337,7 +405,7 @@ export default function App() {
     );
   }
 
-  // ── CUSTOMER FORM ────────────────────────────────────────────────────────
+  // ── CUSTOMER FORM ─────────────────────────────────────────────────────────
   return (
     <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', padding: '2rem 1rem', boxSizing: 'border-box' }}>
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
