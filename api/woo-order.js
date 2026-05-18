@@ -1,4 +1,3 @@
-import { createHmac } from 'crypto';
 import { supabase } from './_db.js';
 import { sendSMS } from './_sms.js';
 
@@ -7,14 +6,10 @@ const SHOP = 'Dry Age Biltong';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Verify WooCommerce webhook signature if secret is set
-  const secret = process.env.WOO_WEBHOOK_SECRET;
-  if (secret) {
-    const signature = req.headers['x-wc-webhook-signature'];
-    if (!signature) return res.status(401).json({ error: 'Missing signature' });
-    const body     = JSON.stringify(req.body);
-    const expected = createHmac('sha256', secret).update(body).digest('base64');
-    if (signature !== expected) return res.status(401).json({ error: 'Invalid signature' });
+  // Basic topic check
+  const topic = req.headers['x-wc-webhook-topic'];
+  if (topic && topic !== 'order.created') {
+    return res.status(200).json({ skipped: 'Not an order.created event' });
   }
 
   const woo = req.body;
@@ -31,7 +26,7 @@ export default async function handler(req, res) {
     .from('orders')
     .select('id')
     .eq('woo_order_id', String(woo.id))
-    .single();
+    .maybeSingle();
 
   if (existing) return res.status(200).json({ skipped: 'Already imported' });
 
@@ -42,31 +37,31 @@ export default async function handler(req, res) {
   // Build order text from line items
   const orderText = (woo.line_items || [])
     .map(item => {
-      const qty = item.quantity > 1 ? ` x${item.quantity}` : '';
+      const qty  = item.quantity > 1 ? ` x${item.quantity}` : '';
       const meta = (item.meta_data || [])
-        .filter(m => !m.key.startsWith('_'))
-        .map(m => `${m.value}`)
+        .filter(m => !String(m.key).startsWith('_'))
+        .map(m => m.value)
         .join(', ');
       return meta ? `${item.name}${qty} (${meta})` : `${item.name}${qty}`;
     })
-    .join('\n');
+    .join('\n') || 'See WooCommerce order';
 
   const order = {
-    id:              `woo_${woo.id}_${Date.now()}`,
+    id:               `woo_${woo.id}_${Date.now()}`,
     name,
     phone,
-    order_text:      orderText || 'See WooCommerce order',
-    notes:           woo.customer_note || '',
-    status:          'del_received',
-    order_type:      'delivery',
-    address_line1:   billing.address_1 || '',
-    address_line2:   billing.address_2 || '',
-    city:            billing.city || '',
-    state_au:        billing.state || '',
-    postcode:        billing.postcode || '',
-    woo_order_id:    String(woo.id),
+    order_text:       orderText,
+    notes:            woo.customer_note || '',
+    status:           'del_received',
+    order_type:       'delivery',
+    address_line1:    billing.address_1 || '',
+    address_line2:    billing.address_2 || '',
+    city:             billing.city || '',
+    state_au:         billing.state || '',
+    postcode:         billing.postcode || '',
+    woo_order_id:     String(woo.id),
     woo_order_number: String(woo.number || woo.id),
-    created_at:      Date.now(),
+    created_at:       Date.now(),
   };
 
   const { error } = await supabase.from('orders').insert(order);
@@ -75,12 +70,11 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Could not save order' });
   }
 
-  // SMS confirmation to customer
   if (phone) {
     try {
       await sendSMS(
         phone,
-        `Hi ${name}, thanks for your order at ${SHOP}! We've received it and will have it packed and shipped for you. We'll text you once it's on its way.`
+        `Hi ${name}, thanks for your order at ${SHOP}! We have received it and will have it packed and shipped for you. We will text you once it is on its way.`
       );
     } catch (e) {
       console.error('SMS error:', e.message);
