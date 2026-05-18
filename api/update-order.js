@@ -22,11 +22,24 @@ export default async function handler(req, res) {
 
   if (error) return res.status(500).json({ error: 'Could not update order' });
 
+  // SMS: pickup order ready
   if (status === 'ready') {
     try {
       await sendSMS(
         order.phone,
         `Hi ${order.name}, your order at ${SHOP} is ready for pickup! See you soon.`
+      );
+    } catch (e) {
+      console.error('SMS error:', e.message);
+    }
+  }
+
+  // SMS: delivery order shipped
+  if (status === 'del_shipped') {
+    try {
+      await sendSMS(
+        order.phone,
+        `Hi ${order.name}, your order from ${SHOP} has been shipped! Keep an eye out for it in the next few days.`
       );
     } catch (e) {
       console.error('SMS error:', e.message);
