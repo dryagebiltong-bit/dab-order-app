@@ -1,5 +1,5 @@
 import { supabase } from './_db.js';
-import { sendSMS } from './_sms.js';
+import { sendSMS, notifyStaff } from './_sms.js';
 
 const SHOP = 'Dry Age Biltong';
 
@@ -34,6 +34,7 @@ export default async function handler(req, res) {
   const { error } = await supabase.from('orders').insert(order);
   if (error) return res.status(500).json({ error: 'Could not save order' });
 
+  // SMS confirmation to customer
   try {
     await sendSMS(
       order.phone,
@@ -41,6 +42,15 @@ export default async function handler(req, res) {
     );
   } catch (e) {
     console.error('SMS error:', e.message);
+  }
+
+  // WhatsApp notification to staff
+  try {
+    await notifyStaff(
+      `🛍️ New pickup order at ${SHOP}\n\nCustomer: ${order.name}\nPhone: ${order.phone}\nOrder: ${order.order_text}\nPickup: ${formatPickup(order.pickup)}${order.notes ? `\nNotes: ${order.notes}` : ''}`
+    );
+  } catch (e) {
+    console.error('Staff notify error:', e.message);
   }
 
   return res.status(200).json({ success: true });
