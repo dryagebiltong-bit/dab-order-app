@@ -6,14 +6,10 @@ const SHOP = 'Dry Age Biltong';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Basic topic check
-  const topic = req.headers['x-wc-webhook-topic'];
-  if (topic && topic !== 'order.created') {
-    return res.status(200).json({ skipped: 'Not an order.created event' });
-  }
-
   const woo = req.body;
-  if (!woo || !woo.id) return res.status(400).json({ error: 'Invalid payload' });
+
+  // Return 200 for test pings (no order id)
+  if (!woo || !woo.id) return res.status(200).json({ skipped: 'Test ping received' });
 
   // Only process Standard Shipping (delivery) orders
   const shippingMethod = (woo.shipping_lines?.[0]?.method_title || '').toLowerCase();
@@ -30,11 +26,21 @@ export default async function handler(req, res) {
 
   if (existing) return res.status(200).json({ skipped: 'Already imported' });
 
-  const billing = woo.billing || {};
-  const name    = [billing.first_name, billing.last_name].filter(Boolean).join(' ').trim() || 'Customer';
-  const phone   = billing.phone || '';
+  const billing  = woo.billing  || {};
+  const shipping = woo.shipping || {};
 
-  // Build order text from line items
+  // Use shipping address for delivery, fall back to billing
+  const addr = {
+    line1:   shipping.address_1 || billing.address_1 || '',
+    line2:   shipping.address_2 || billing.address_2 || '',
+    city:    shipping.city      || billing.city      || '',
+    state:   shipping.state     || billing.state     || '',
+    postcode: shipping.postcode || billing.postcode  || '',
+  };
+
+  const name  = [billing.first_name, billing.last_name].filter(Boolean).join(' ').trim() || 'Customer';
+  const phone = billing.phone || '';
+
   const orderText = (woo.line_items || [])
     .map(item => {
       const qty  = item.quantity > 1 ? ` x${item.quantity}` : '';
@@ -54,11 +60,11 @@ export default async function handler(req, res) {
     notes:            woo.customer_note || '',
     status:           'del_received',
     order_type:       'delivery',
-    address_line1:    billing.address_1 || '',
-    address_line2:    billing.address_2 || '',
-    city:             billing.city || '',
-    state_au:         billing.state || '',
-    postcode:         billing.postcode || '',
+    address_line1:    addr.line1,
+    address_line2:    addr.line2,
+    city:             addr.city,
+    state_au:         addr.state,
+    postcode:         addr.postcode,
     woo_order_id:     String(woo.id),
     woo_order_number: String(woo.number || woo.id),
     created_at:       Date.now(),
