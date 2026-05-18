@@ -1,23 +1,24 @@
 import { supabase } from './_db.js';
-import { sendSMS } from './_sms.js';
+import { sendSMS, notifyStaff } from './_sms.js';
 
 const SHOP = 'Dry Age Biltong';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const woo = req.body;
+  const topic = req.headers['x-wc-webhook-topic'];
+  if (topic && topic !== 'order.created') {
+    return res.status(200).json({ skipped: 'Not an order.created event' });
+  }
 
-  // Return 200 for test pings (no order id)
+  const woo = req.body;
   if (!woo || !woo.id) return res.status(200).json({ skipped: 'Test ping received' });
 
-  // Only process Standard Shipping (delivery) orders
   const shippingMethod = (woo.shipping_lines?.[0]?.method_title || '').toLowerCase();
   if (!shippingMethod.includes('standard')) {
     return res.status(200).json({ skipped: 'Not a standard shipping order' });
   }
 
-  // Prevent duplicate imports
   const { data: existing } = await supabase
     .from('orders')
     .select('id')
@@ -29,13 +30,12 @@ export default async function handler(req, res) {
   const billing  = woo.billing  || {};
   const shipping = woo.shipping || {};
 
-  // Use shipping address for delivery, fall back to billing
   const addr = {
-    line1:   shipping.address_1 || billing.address_1 || '',
-    line2:   shipping.address_2 || billing.address_2 || '',
-    city:    shipping.city      || billing.city      || '',
-    state:   shipping.state     || billing.state     || '',
-    postcode: shipping.postcode || billing.postcode  || '',
+    line1:    shipping.address_1 || billing.address_1 || '',
+    line2:    shipping.address_2 || billing.address_2 || '',
+    city:     shipping.city      || billing.city      || '',
+    state:    shipping.state     || billing.state     || '',
+    postcode: shipping.postcode  || billing.postcode  || '',
   };
 
   const name  = [billing.first_name, billing.last_name].filter(Boolean).join(' ').trim() || 'Customer';
@@ -85,6 +85,15 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('SMS error:', e.message);
     }
+  }
+
+  try {
+    const suburb = [addr.city, addr.state].filter(Boolean).join(' ');
+    await notifyStaff(
+      `🚚 New delivery order at ${SHOP}\n\nOrder #${order.woo_order_number}\nCustomer: ${name}\nPhone: ${phone}\nOrder: ${orderText}\nDeliver to: ${[addr.line1, suburb, addr.postcode].filter(Boolean).join(', ')}${order.notes ? `\nNotes: ${order.notes}` : ''}`
+    );
+  } catch (e) {
+    console.error('Staff notify error:', e.message);
   }
 
   return res.status(200).json({ success: true, orderId: order.id });
