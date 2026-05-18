@@ -1,60 +1,65 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const LOGO_URL = 'https://dryagebiltong.com.au/wp-content/uploads/2026/05/download.png';
 
-const B      = '#0a0a0a';
-const W      = '#ffffff';
-const G      = '#f8f8f8';
-const BORDER = `2px solid ${B}`;
-const FONT   = '"DM Sans", sans-serif';
+// ── DESIGN TOKENS ─────────────────────────────────────────────────────────────
+const C = {
+  bg:           '#0d1117',
+  surface:      '#141922',
+  surface2:     '#1a2130',
+  surface3:     '#1f2840',
+  border:       '#1e2535',
+  borderHover:  '#2e3850',
+  text1:        '#eef0f6',
+  text2:        '#7b849e',
+  text3:        '#3a4258',
+  amber:        '#f59e0b',
+  amberDim:     'rgba(245,158,11,0.10)',
+  amberGlow:    'rgba(245,158,11,0.20)',
+  indigo:       '#818cf8',
+  indigoDim:    'rgba(129,140,248,0.10)',
+  emerald:      '#34d399',
+  emeraldDim:   'rgba(52,211,153,0.10)',
+  orange:       '#fb923c',
+  orangeDim:    'rgba(251,146,60,0.10)',
+  red:          '#f87171',
+  blue:         '#60a5fa',
+  blueDim:      'rgba(96,165,250,0.10)',
+};
 
+const FONT      = '"DM Sans", sans-serif';
+const MONO      = '"SF Mono", "Fira Mono", monospace';
+
+// ── COLUMN CONFIGS ─────────────────────────────────────────────────────────────
 const PICKUP_COLS = [
-  { id: 'received',  label: 'Order Received',  short: 'NEW',   bg: B,         fg: W },
-  { id: 'preparing', label: 'Preparing',        short: 'PREP',  bg: '#1a3a5c', fg: W },
-  { id: 'ready',     label: 'Ready for Pickup', short: 'READY', bg: '#1a4a1a', fg: W },
+  { id: 'received',  label: 'Order Received',  short: 'RECEIVED', color: C.amber,   dim: C.amberDim,   glow: C.amberGlow  },
+  { id: 'preparing', label: 'Preparing',        short: 'PREPARING', color: C.indigo,  dim: C.indigoDim,  glow: 'rgba(129,140,248,0.15)' },
+  { id: 'ready',     label: 'Ready for Pickup', short: 'READY',     color: C.emerald, dim: C.emeraldDim, glow: 'rgba(52,211,153,0.15)' },
 ];
 
 const DEL_COLS = [
-  { id: 'del_received',  label: 'Order Received', short: 'NEW',  bg: B,         fg: W },
-  { id: 'del_preparing', label: 'Preparing',       short: 'PREP', bg: '#1a3a5c', fg: W },
-  { id: 'del_shipped',   label: 'Shipped',         short: 'SHIP', bg: '#5c1a00', fg: W },
+  { id: 'del_received',  label: 'Order Received', short: 'RECEIVED', color: C.amber,   dim: C.amberDim,   glow: C.amberGlow },
+  { id: 'del_preparing', label: 'Preparing',       short: 'PREPARING', color: C.indigo,  dim: C.indigoDim,  glow: 'rgba(129,140,248,0.15)' },
+  { id: 'del_shipped',   label: 'Shipped',         short: 'SHIPPED',   color: C.orange,  dim: C.orangeDim,  glow: 'rgba(251,146,60,0.15)' },
 ];
 
 const PICKUP_STATUSES  = new Set(['received', 'preparing', 'ready']);
 const DEL_STATUSES     = new Set(['del_received', 'del_preparing', 'del_shipped']);
 const ARCHIVE_STATUSES = new Set(['picked_up', 'delivered']);
 
-const btnBlack = {
-  display: 'block', width: '100%', height: 54, background: B, color: W,
-  border: BORDER, fontFamily: FONT, fontSize: '0.82rem', fontWeight: 900,
-  letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: 0,
-};
-
-function Logo({ dark = false, small = false }) {
-  if (LOGO_URL) {
-    return (
-      <div style={{ textAlign: 'center', marginBottom: small ? '0.5rem' : '1.75rem' }}>
-        <img src={LOGO_URL} alt="Dry Age Biltong"
-          style={{ height: small ? 44 : 120, width: 'auto', filter: dark ? 'invert(1)' : 'none' }} />
-      </div>
-    );
-  }
-  const color = dark ? '#aaa' : B;
-  const line  = dark ? '#444' : B;
-  return (
-    <div style={{ textAlign: 'center', marginBottom: small ? '0.5rem' : '1.75rem' }}>
-      <div style={{ display: 'inline-block', borderBottom: `2.5px solid ${line}`, paddingBottom: '0.3rem' }}>
-        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: small ? '0.6rem' : '0.72rem', letterSpacing: '4px', textTransform: 'uppercase', color, lineHeight: 1.3 }}>Dry Age</div>
-        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: small ? '0.6rem' : '0.72rem', letterSpacing: '4px', textTransform: 'uppercase', color, lineHeight: 1.3 }}>Biltong</div>
-      </div>
-    </div>
-  );
+// ── HELPERS ────────────────────────────────────────────────────────────────────
+function timeAgo(ts) {
+  const d = Date.now() - ts;
+  const m = Math.floor(d / 60000);
+  if (m < 1)  return 'now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
-function formatTime(ts) {
-  return new Date(ts).toLocaleString('en-AU', {
-    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
+function isNew(ts) {
+  return Date.now() - ts < 5 * 60 * 1000;
 }
 
 function formatPickup(d) {
@@ -62,6 +67,12 @@ function formatPickup(d) {
   const [y, mo, day] = d.split('-');
   return new Date(Number(y), Number(mo) - 1, Number(day)).toLocaleDateString('en-AU', {
     weekday: 'short', day: 'numeric', month: 'short',
+  });
+}
+
+function formatTime(ts) {
+  return new Date(ts).toLocaleString('en-AU', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 }
 
@@ -76,234 +87,468 @@ async function callAPI(path, options = {}, pin = null) {
   return { ok: res.ok, status: res.status, data: await res.json() };
 }
 
-// ── STAFF HEADER ──────────────────────────────────────────────────────────────
-function StaffHeader({ orders, onRefresh, onLock, archiveView, setArchiveView }) {
-  const pickupActive   = orders.filter(o => PICKUP_STATUSES.has(o.status)).length;
-  const deliveryActive = orders.filter(o => DEL_STATUSES.has(o.status)).length;
-  const archived       = orders.filter(o => ARCHIVE_STATUSES.has(o.status)).length;
-  const headerBtn = {
-    background: 'none', border: '1px solid #333', color: '#666', fontFamily: FONT,
-    fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase',
-    padding: '0.35rem 0.65rem', cursor: 'pointer',
-  };
+// ── GLOBAL STYLES INJECTION ────────────────────────────────────────────────────
+function useGlobalStyles() {
+  useEffect(() => {
+    const el = document.createElement('style');
+    el.textContent = `
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: ${C.bg}; }
+      ::-webkit-scrollbar { width: 3px; height: 3px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 8px; }
+
+      @keyframes fadeSlide {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes pulseNew {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+        50%       { box-shadow: 0 0 0 6px rgba(245,158,11,0.12); }
+      }
+      @keyframes breathe {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.55; }
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .card-anim   { animation: fadeSlide 0.22s ease both; }
+      .card-new    { animation: pulseNew 2.5s ease infinite; }
+      .dot-new     { animation: breathe 1.4s ease infinite; }
+      .spin        { animation: spin 0.7s linear infinite; }
+
+      .action-btn  { transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s; }
+      .action-btn:active { transform: scale(0.96); }
+      .card-wrap   { transition: border-color 0.15s, box-shadow 0.15s; }
+    `;
+    document.head.appendChild(el);
+    return () => document.head.removeChild(el);
+  }, []);
+}
+
+// ── LIVE TICK ──────────────────────────────────────────────────────────────────
+function useTick(ms = 30000) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick(v => v + 1), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return tick;
+}
+
+// ── LOGO ───────────────────────────────────────────────────────────────────────
+function Logo({ size = 48, invert = true }) {
+  return LOGO_URL
+    ? <img src={LOGO_URL} alt="Dry Age Biltong" style={{ height: size, width: 'auto', filter: invert ? 'invert(1)' : 'none', display: 'block' }} />
+    : <span style={{ fontFamily: FONT, fontWeight: 900, fontSize: '1rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.text1 }}>DAB</span>;
+}
+
+// ── STAT CHIP ──────────────────────────────────────────────────────────────────
+function StatChip({ label, count, color }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <Logo dark />
-        <div>
-          <div style={{ fontSize: '0.58rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>
-            {archiveView ? 'Archive' : 'Order Board'}
-          </div>
-          {archiveView ? (
-            <div style={{ fontSize: '0.7rem', color: '#555' }}>{archived} orders</div>
-          ) : (
-            <div style={{ fontSize: '0.7rem', color: '#555' }}>
-              <span style={{ color: '#666' }}>{pickupActive} pickup</span>
-              <span style={{ color: '#2a2a2a' }}>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-              <span style={{ color: '#3a5a7a' }}>{deliveryActive} delivery</span>
-            </div>
-          )}
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button onClick={() => setArchiveView(v => !v)}
-          style={{ ...headerBtn, borderColor: archiveView ? '#666' : '#333', color: archiveView ? '#aaa' : '#666' }}>
-          {archiveView ? '← Live Board' : `Archive (${archived})`}
-        </button>
-        <button onClick={onRefresh} style={headerBtn}>Refresh</button>
-        <button onClick={onLock} style={headerBtn}>Lock</button>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <span style={{ fontFamily: MONO, fontSize: '1.1rem', fontWeight: 600, color: C.text1, lineHeight: 1 }}>{count}</span>
+      <span style={{ fontFamily: FONT, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: C.text2 }}>{label}</span>
     </div>
   );
 }
 
-// ── PICKUP CARD ───────────────────────────────────────────────────────────────
-function PickupCard({ o, colId, allCols, archiveColId, isMobile, onMove, onDel, onDragStart, onTouchStart, onTouchMove, onTouchEnd }) {
+// ── HEADER ─────────────────────────────────────────────────────────────────────
+function Header({ orders, onRefresh, onLock, archiveView, setArchiveView, refreshing }) {
+  const pickup   = orders.filter(o => PICKUP_STATUSES.has(o.status)).length;
+  const delivery = orders.filter(o => DEL_STATUSES.has(o.status)).length;
+  const archived = orders.filter(o => ARCHIVE_STATUSES.has(o.status)).length;
+
+  const btn = {
+    background: 'none', border: `1px solid ${C.border}`, color: C.text2,
+    fontFamily: FONT, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1.5px',
+    textTransform: 'uppercase', padding: '0.5rem 0.85rem', cursor: 'pointer',
+    borderRadius: '4px', whiteSpace: 'nowrap',
+  };
+
   return (
-    <div draggable
+    <header style={{
+      position: 'sticky', top: 0, zIndex: 100,
+      background: `linear-gradient(180deg, ${C.bg} 0%, rgba(13,17,23,0.97) 100%)`,
+      borderBottom: `1px solid ${C.border}`,
+      backdropFilter: 'blur(12px)',
+      padding: '0.75rem 1.25rem',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+        <Logo size={42} />
+        <div style={{ width: 1, height: 32, background: C.border }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+          <span style={{ fontFamily: FONT, fontSize: '0.52rem', fontWeight: 800, letterSpacing: '2.5px', textTransform: 'uppercase', color: C.text3 }}>
+            {archiveView ? 'Archive' : 'Order Board'}
+          </span>
+          <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {archiveView ? (
+              <StatChip label="Archived" count={archived} color={C.text3} />
+            ) : (
+              <>
+                <StatChip label="Pickup"   count={pickup}   color={C.amber}  />
+                <div style={{ width: 1, height: 14, background: C.border }} />
+                <StatChip label="Delivery" count={delivery} color={C.blue}   />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          className="action-btn"
+          onClick={() => setArchiveView(v => !v)}
+          style={{ ...btn, borderColor: archiveView ? C.borderHover : C.border, color: archiveView ? C.text1 : C.text2 }}>
+          {archiveView ? '← Board' : `Archive (${archived})`}
+        </button>
+        <button className="action-btn" onClick={onRefresh} style={btn}>
+          <span className={refreshing ? 'spin' : ''} style={{ display: 'inline-block' }}>↻</span>
+          {' '}Refresh
+        </button>
+        <button className="action-btn" onClick={onLock} style={{ ...btn, borderColor: '#3a2020', color: '#8a5050' }}>
+          Lock
+        </button>
+      </div>
+    </header>
+  );
+}
+
+// ── COLUMN HEADER ──────────────────────────────────────────────────────────────
+function ColHeader({ col, count }) {
+  return (
+    <div style={{
+      padding: '0.75rem 1rem',
+      borderBottom: `1px solid ${C.border}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      background: col.dim,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, boxShadow: `0 0 6px ${col.color}` }} />
+        <span style={{ fontFamily: FONT, fontSize: '0.62rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: col.color }}>
+          {col.label}
+        </span>
+      </div>
+      {count > 0 && (
+        <span style={{
+          fontFamily: MONO, fontSize: '0.75rem', fontWeight: 600, color: col.color,
+          background: col.glow, padding: '0.1rem 0.5rem', borderRadius: '12px',
+          border: `1px solid ${col.glow}`,
+        }}>{count}</span>
+      )}
+    </div>
+  );
+}
+
+// ── PICKUP CARD ────────────────────────────────────────────────────────────────
+function PickupCard({ o, col, allCols, archiveColId, isMobile, onMove, onDel, onDragStart, onTouchStart, onTouchMove, onTouchEnd }) {
+  useTick(30000);
+  const fresh = isNew(o.created_at);
+
+  const card = {
+    background: C.surface,
+    borderLeft: `3px solid ${col.color}`,
+    borderRight: `1px solid ${C.border}`,
+    borderTop: `1px solid ${C.border}`,
+    borderBottom: `1px solid ${C.border}`,
+    marginBottom: '0.5rem',
+    cursor: 'grab',
+    userSelect: 'none',
+    touchAction: 'none',
+    overflow: 'hidden',
+  };
+
+  const moveBtn = (c) => ({
+    flex: 1, height: 40,
+    background: 'none',
+    border: `1px solid ${C.border}`,
+    color: C.text2,
+    fontFamily: FONT, fontSize: '0.58rem', fontWeight: 800,
+    letterSpacing: '1.5px', textTransform: 'uppercase',
+    cursor: 'pointer', minWidth: 0,
+  });
+
+  return (
+    <div
+      className={`card-wrap card-anim${fresh ? ' card-new' : ''}`}
+      draggable
       onDragStart={e => onDragStart(e, o.id)}
       onTouchStart={e => onTouchStart(e, o.id)}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      style={{ background: '#1e1e1e', border: '1px solid #2e2e2e', padding: '0.85rem', cursor: isMobile ? 'default' : 'grab', userSelect: 'none', touchAction: 'none' }}
-      onMouseEnter={e => !isMobile && (e.currentTarget.style.borderColor = '#555')}
-      onMouseLeave={e => !isMobile && (e.currentTarget.style.borderColor = '#2e2e2e')}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.55rem' }}>
-        <div>
-          <div style={{ fontWeight: 900, fontSize: '0.9rem', marginBottom: 2 }}>{o.name}</div>
-          <div style={{ fontSize: '0.72rem', color: '#777' }}>{o.phone}</div>
+      style={card}>
+
+      {/* Top row */}
+      <div style={{ padding: '0.85rem 0.85rem 0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+            {fresh && <div className="dot-new" style={{ width: 6, height: 6, borderRadius: '50%', background: col.color, flexShrink: 0 }} />}
+            <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: '1rem', color: C.text1, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {o.name}
+            </div>
+          </div>
+          <a href={`tel:${o.phone}`} style={{ fontFamily: MONO, fontSize: '0.72rem', color: C.text2, textDecoration: 'none', letterSpacing: '0.5px' }}>
+            {o.phone}
+          </a>
         </div>
-        <button onClick={() => onDel(o.id)}
-          style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
-          onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
-          onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flexShrink: 0, marginLeft: '0.75rem' }}>
+          <span style={{ fontFamily: MONO, fontSize: '0.62rem', color: C.text3, paddingTop: '2px' }}>{timeAgo(o.created_at)}</span>
+          <button onClick={() => onDel(o.id)}
+            style={{ background: 'none', border: 'none', color: C.text3, fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
+            onMouseEnter={e => e.currentTarget.style.color = C.red}
+            onMouseLeave={e => e.currentTarget.style.color = C.text3}>×</button>
+        </div>
       </div>
-      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: W, lineHeight: 1.5, marginBottom: '0.55rem', whiteSpace: 'pre-wrap' }}>{o.order_text}</div>
-      <div style={{ borderTop: '1px solid #252525', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#555', marginBottom: 2 }}>Pickup</div>
-          <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#bbb' }}>{formatPickup(o.pickup)}</div>
-        </div>
-        <div style={{ fontSize: '0.58rem', color: '#444' }}>{formatTime(o.created_at)}</div>
+
+      {/* Order text */}
+      <div style={{ margin: '0 0.85rem 0.75rem', background: C.surface2, border: `1px solid ${C.border}`, padding: '0.6rem 0.75rem', borderRadius: '3px' }}>
+        <div style={{ fontFamily: FONT, fontSize: '0.85rem', fontWeight: 700, color: C.text1, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{o.order_text}</div>
       </div>
-      {o.notes && (
-        <div style={{ fontSize: '0.72rem', color: '#666', fontStyle: 'italic', borderTop: '1px solid #252525', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
-          {o.notes}
+
+      {/* Pickup date */}
+      <div style={{ padding: '0 0.85rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontFamily: FONT, fontSize: '0.52rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: C.text3, marginBottom: '0.2rem' }}>Pickup</div>
+          <div style={{ fontFamily: FONT, fontSize: '0.85rem', fontWeight: 800, color: col.color }}>{formatPickup(o.pickup)}</div>
         </div>
-      )}
-      <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.7rem', flexWrap: 'wrap' }}>
-        {allCols.filter(c => c.id !== colId).map(c => (
-          <button key={c.id} onClick={() => onMove(o.id, c.id)}
-            style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#2e2e2e'; e.currentTarget.style.color = '#555'; }}>
+        {o.notes && (
+          <div style={{ fontFamily: FONT, fontSize: '0.68rem', color: C.text2, fontStyle: 'italic', maxWidth: '55%', textAlign: 'right', lineHeight: 1.4 }}>{o.notes}</div>
+        )}
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '1px', background: C.border }}>
+        {allCols.filter(c => c.id !== col.id).map(c => (
+          <button key={c.id} className="action-btn" onClick={() => onMove(o.id, c.id)}
+            style={moveBtn(c)}
+            onMouseEnter={e => { e.currentTarget.style.background = c.dim; e.currentTarget.style.color = c.color; e.currentTarget.style.borderColor = c.glow; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.text2; e.currentTarget.style.borderColor = C.border; }}>
             {c.short}
           </button>
         ))}
-        <button onClick={() => onMove(o.id, archiveColId)}
-          style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#2e2e2e'; e.currentTarget.style.color = '#555'; }}>
-          DONE
+        <button className="action-btn" onClick={() => onMove(o.id, archiveColId)}
+          style={{ ...moveBtn(null), borderColor: C.border, color: C.text3 }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.emeraldDim; e.currentTarget.style.color = C.emerald; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.text3; }}>
+          DONE ✓
         </button>
       </div>
     </div>
   );
 }
 
-// ── DELIVERY CARD ─────────────────────────────────────────────────────────────
-function DeliveryCard({ o, colId, allCols, archiveColId, isMobile, onMove, onDel, expanded, onToggle, onDragStart, onTouchStart, onTouchMove, onTouchEnd }) {
+// ── DELIVERY CARD ──────────────────────────────────────────────────────────────
+function DeliveryCard({ o, col, allCols, archiveColId, isMobile, onMove, onDel, expanded, onToggle, onDragStart, onTouchStart, onTouchMove, onTouchEnd }) {
+  useTick(30000);
+  const fresh = isNew(o.created_at);
   const suburb = [o.city, o.state_au].filter(Boolean).join(' ');
+
+  const card = {
+    background: C.surface,
+    borderLeft: `3px solid ${col.color}`,
+    borderRight: `1px solid ${C.border}`,
+    borderTop: `1px solid ${C.border}`,
+    borderBottom: `1px solid ${C.border}`,
+    marginBottom: '0.5rem',
+    userSelect: 'none',
+    touchAction: 'none',
+    overflow: 'hidden',
+  };
+
+  const moveBtn = (c) => ({
+    flex: 1, height: 40,
+    background: 'none',
+    border: `1px solid ${C.border}`,
+    color: C.text2,
+    fontFamily: FONT, fontSize: '0.58rem', fontWeight: 800,
+    letterSpacing: '1.5px', textTransform: 'uppercase',
+    cursor: 'pointer', minWidth: 0,
+  });
+
   return (
-    <div draggable
+    <div
+      className={`card-wrap card-anim${fresh ? ' card-new' : ''}`}
+      draggable
       onDragStart={e => onDragStart(e, o.id)}
       onTouchStart={e => onTouchStart(e, o.id)}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      style={{ background: '#1e1e1e', border: '1px solid #2e2e2e', userSelect: 'none', touchAction: 'none' }}
-      onMouseEnter={e => !isMobile && (e.currentTarget.style.borderColor = '#555')}
-      onMouseLeave={e => !isMobile && (e.currentTarget.style.borderColor = '#2e2e2e')}>
+      style={card}>
 
-      {/* Collapsed header — click to expand */}
-      <div onClick={onToggle} style={{ padding: '0.85rem', paddingBottom: expanded ? '0.4rem' : '0.85rem', cursor: 'pointer' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.3rem' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 }}>
-              <div style={{ fontWeight: 900, fontSize: '0.9rem' }}>{o.name}</div>
-              {o.woo_order_number && (
-                <span style={{ fontSize: '0.52rem', background: '#161616', color: '#555', padding: '0.15rem 0.4rem', border: '1px solid #2a2a2a', letterSpacing: '0.5px', flexShrink: 0 }}>
-                  #{o.woo_order_number}
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#777' }}>{o.phone}</div>
+      {/* Tap header */}
+      <div onClick={onToggle} style={{ padding: '0.85rem 0.85rem 0.6rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+            {fresh && <div className="dot-new" style={{ width: 6, height: 6, borderRadius: '50%', background: col.color, flexShrink: 0 }} />}
+            <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: '1rem', color: C.text1, lineHeight: 1.2 }}>{o.name}</div>
+            {o.woo_order_number && (
+              <span style={{ fontFamily: MONO, fontSize: '0.58rem', color: C.text3, background: C.surface2, padding: '0.1rem 0.4rem', border: `1px solid ${C.border}`, borderRadius: '3px' }}>
+                #{o.woo_order_number}
+              </span>
+            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, marginLeft: '0.5rem' }}>
-            <span style={{ fontSize: '0.65rem', color: '#444', display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</span>
-            <button onClick={e => { e.stopPropagation(); onDel(o.id); }}
-              style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0, fontFamily: FONT }}
-              onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
-              onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
-          </div>
+          <a href={`tel:${o.phone}`} style={{ fontFamily: MONO, fontSize: '0.72rem', color: C.text2, textDecoration: 'none', letterSpacing: '0.5px' }}>
+            {o.phone}
+          </a>
         </div>
-        {!expanded && (
-          <>
-            {suburb && <div style={{ fontSize: '0.68rem', color: '#555', marginBottom: '0.2rem' }}>📍 {suburb}</div>}
-            <div style={{ fontSize: '0.75rem', color: '#777', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.order_text}</div>
-          </>
-        )}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', flexShrink: 0, marginLeft: '0.75rem' }}>
+          <span style={{ fontFamily: MONO, fontSize: '0.62rem', color: C.text3, paddingTop: '2px' }}>{timeAgo(o.created_at)}</span>
+          <span style={{ color: C.text3, fontSize: '0.7rem', paddingTop: '3px', transition: 'transform 0.2s', display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'none' }}>▾</span>
+          <button onClick={e => { e.stopPropagation(); onDel(o.id); }}
+            style={{ background: 'none', border: 'none', color: C.text3, fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = C.red}
+            onMouseLeave={e => e.currentTarget.style.color = C.text3}>×</button>
+        </div>
       </div>
+
+      {/* Collapsed preview */}
+      {!expanded && (
+        <div style={{ padding: '0 0.85rem 0.75rem' }}>
+          {suburb && <div style={{ fontFamily: FONT, fontSize: '0.72rem', color: C.text2, marginBottom: '0.2rem' }}>📍 {suburb}</div>}
+          <div style={{ fontFamily: FONT, fontSize: '0.8rem', color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.order_text}</div>
+        </div>
+      )}
 
       {/* Expanded details */}
       {expanded && (
         <div style={{ padding: '0 0.85rem 0.75rem' }}>
-          <div style={{ background: '#161616', padding: '0.6rem 0.75rem', marginBottom: '0.65rem', borderLeft: '2px solid #2a2a2a' }}>
-            <div style={{ fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#444', marginBottom: '0.35rem' }}>Delivery Address</div>
-            {o.address_line1 && <div style={{ fontSize: '0.82rem', color: '#ddd', lineHeight: 1.6 }}>{o.address_line1}</div>}
-            {o.address_line2 && <div style={{ fontSize: '0.82rem', color: '#ddd', lineHeight: 1.6 }}>{o.address_line2}</div>}
+          <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderLeft: `2px solid ${col.color}`, padding: '0.65rem 0.75rem', marginBottom: '0.65rem', borderRadius: '3px' }}>
+            <div style={{ fontFamily: FONT, fontSize: '0.52rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: C.text3, marginBottom: '0.35rem' }}>Delivery Address</div>
+            {o.address_line1 && <div style={{ fontFamily: FONT, fontSize: '0.85rem', color: C.text1, lineHeight: 1.6, fontWeight: 600 }}>{o.address_line1}</div>}
+            {o.address_line2 && <div style={{ fontFamily: FONT, fontSize: '0.85rem', color: C.text1, lineHeight: 1.6, fontWeight: 600 }}>{o.address_line2}</div>}
             {(o.city || o.state_au || o.postcode) && (
-              <div style={{ fontSize: '0.82rem', color: '#ddd', lineHeight: 1.6 }}>
+              <div style={{ fontFamily: FONT, fontSize: '0.85rem', color: C.text1, lineHeight: 1.6, fontWeight: 600 }}>
                 {[o.city, o.state_au, o.postcode].filter(Boolean).join(' ')}
               </div>
             )}
           </div>
           <div style={{ marginBottom: '0.65rem' }}>
-            <div style={{ fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#444', marginBottom: '0.35rem' }}>Order</div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: W, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{o.order_text}</div>
+            <div style={{ fontFamily: FONT, fontSize: '0.52rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: C.text3, marginBottom: '0.35rem' }}>Order</div>
+            <div style={{ fontFamily: FONT, fontSize: '0.88rem', fontWeight: 700, color: C.text1, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{o.order_text}</div>
           </div>
           {o.notes && (
-            <div style={{ fontSize: '0.72rem', color: '#666', fontStyle: 'italic', borderTop: '1px solid #222', paddingTop: '0.4rem', marginBottom: '0.5rem', lineHeight: 1.5 }}>
+            <div style={{ fontFamily: FONT, fontSize: '0.75rem', color: C.text2, fontStyle: 'italic', borderTop: `1px solid ${C.border}`, paddingTop: '0.4rem', marginBottom: '0.5rem', lineHeight: 1.5 }}>
               {o.notes}
             </div>
           )}
-          <div style={{ fontSize: '0.58rem', color: '#383838' }}>{formatTime(o.created_at)}</div>
+          <div style={{ fontFamily: MONO, fontSize: '0.6rem', color: C.text3 }}>{formatTime(o.created_at)}</div>
         </div>
       )}
 
-      {/* Move buttons */}
-      <div style={{ padding: '0 0.85rem 0.7rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-        {allCols.filter(c => c.id !== colId).map(c => (
-          <button key={c.id} onClick={() => onMove(o.id, c.id)}
-            style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#2e2e2e'; e.currentTarget.style.color = '#555'; }}>
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '1px', background: C.border }}>
+        {allCols.filter(c => c.id !== col.id).map(c => (
+          <button key={c.id} className="action-btn" onClick={() => onMove(o.id, c.id)}
+            style={moveBtn(c)}
+            onMouseEnter={e => { e.currentTarget.style.background = c.dim; e.currentTarget.style.color = c.color; e.currentTarget.style.borderColor = c.glow; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.text2; e.currentTarget.style.borderColor = C.border; }}>
             {c.short}
           </button>
         ))}
-        <button onClick={() => onMove(o.id, archiveColId)}
-          style={{ flex: 1, background: 'none', border: '1px solid #2e2e2e', color: '#555', fontFamily: FONT, fontSize: '0.55rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.2rem', cursor: 'pointer', minWidth: 0 }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#2e2e2e'; e.currentTarget.style.color = '#555'; }}>
-          DONE
+        <button className="action-btn" onClick={() => onMove(o.id, archiveColId)}
+          style={{ ...moveBtn(null), color: C.text3 }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.emeraldDim; e.currentTarget.style.color = C.emerald; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = C.text3; }}>
+          DONE ✓
         </button>
       </div>
     </div>
   );
 }
 
-// ── BOARD SECTION ─────────────────────────────────────────────────────────────
+// ── ARCHIVE DROP ZONE ──────────────────────────────────────────────────────────
+function ArchiveDrop({ colId, label, count, over, onDragOver, onDrop, onDragLeave, isMobile }) {
+  return (
+    <div
+      data-col-id={colId}
+      onDragOver={e => onDragOver(e, colId)}
+      onDrop={e => onDrop(e, colId)}
+      onDragLeave={onDragLeave}
+      style={{
+        border: `1px dashed ${over ? C.borderHover : C.border}`,
+        background: over ? C.surface2 : 'transparent',
+        minHeight: isMobile ? 80 : 340,
+        display: 'flex', flexDirection: 'column',
+        transition: 'all 0.15s',
+      }}>
+      <div style={{ padding: '0.75rem 1rem', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontFamily: FONT, fontSize: '0.62rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: over ? C.text2 : C.text3 }}>{label}</span>
+        {count > 0 && <span style={{ fontFamily: MONO, fontSize: '0.7rem', color: C.text3 }}>{count}</span>}
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.65rem', padding: '1.5rem' }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+          stroke={over ? C.text2 : C.text3} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="21 8 21 21 3 21 3 8" />
+          <rect x="1" y="3" width="22" height="5" />
+          <line x1="10" y1="12" x2="14" y2="12" />
+        </svg>
+        <span style={{ fontFamily: FONT, fontSize: '0.6rem', color: over ? C.text2 : C.text3, letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8 }}>
+          {isMobile ? 'Tap DONE' : (over ? 'Release to archive' : 'Drag here\nwhen done')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── BOARD SECTION ──────────────────────────────────────────────────────────────
 function BoardSection({ title, accentColor, cols, archiveColId, archiveLabel, orders, isMobile, dragOver, onDragOver, onDrop, onDragLeave, onDragStart, onTouchStart, onTouchMove, onTouchEnd, onMove, onDel, expandedCards, onToggleExpand }) {
   const isDelivery    = archiveColId === 'delivered';
   const sectionOrders = orders.filter(o => cols.some(c => c.id === o.status));
   const archivedCount = orders.filter(o => o.status === archiveColId).length;
   const totalCols     = cols.length + 1;
-  const gridCols      = isMobile ? '1fr' : `repeat(${totalCols}, minmax(220px, 1fr))`;
+  const gridCols      = isMobile ? '1fr' : `repeat(${totalCols}, minmax(230px, 1fr))`;
 
   return (
-    <div style={{ marginBottom: '2.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.85rem' }}>
-        <div style={{ width: 3, height: 14, background: accentColor, flexShrink: 0 }} />
-        <div style={{ fontSize: '0.6rem', fontWeight: 900, letterSpacing: '3px', textTransform: 'uppercase', color: '#555' }}>{title}</div>
-        <div style={{ flex: 1, height: 1, background: '#1e1e1e' }} />
-        <div style={{ fontSize: '0.58rem', color: '#333', letterSpacing: '1px' }}>{sectionOrders.length} active</div>
+    <div style={{ marginBottom: '0.5rem' }}>
+      {/* Section label */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '0.75rem',
+        padding: '0.75rem 1.25rem',
+        borderBottom: `1px solid ${C.border}`,
+        background: `linear-gradient(90deg, rgba(${accentColor === '#d97706' ? '217,119,6' : '37,99,235'},0.06) 0%, transparent 60%)`,
+      }}>
+        <div style={{ width: 2, height: 16, background: accentColor, borderRadius: '2px', flexShrink: 0 }} />
+        <span style={{ fontFamily: FONT, fontSize: '0.6rem', fontWeight: 900, letterSpacing: '3px', textTransform: 'uppercase', color: accentColor }}>{title}</span>
+        <div style={{ flex: 1, height: 1, background: C.border }} />
+        <span style={{ fontFamily: MONO, fontSize: '0.68rem', color: C.text3 }}>{sectionOrders.length} active</span>
       </div>
 
-      <div style={{ width: '100%', overflowX: isMobile ? 'visible' : 'auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: '0.65rem', minWidth: isMobile ? 'auto' : `${totalCols * 235}px` }}>
+      {/* Columns grid */}
+      <div style={{ overflowX: isMobile ? 'visible' : 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 0, minWidth: isMobile ? 'auto' : `${totalCols * 240}px`, borderBottom: `1px solid ${C.border}` }}>
           {cols.map(col => {
             const cards = sectionOrders.filter(o => o.status === col.id);
             const over  = dragOver === col.id;
             return (
               <div key={col.id} data-col-id={col.id}
-                style={{ background: over ? '#1c1c1c' : '#161616', border: over ? '2px dashed #555' : '2px solid #222', minHeight: isMobile ? 'auto' : 360, display: 'flex', flexDirection: 'column' }}
+                style={{
+                  borderRight: `1px solid ${C.border}`,
+                  background: over ? C.surface2 : C.bg,
+                  minHeight: isMobile ? 'auto' : 420,
+                  display: 'flex', flexDirection: 'column',
+                  transition: 'background 0.15s',
+                }}
                 onDragOver={e => onDragOver(e, col.id)}
                 onDrop={e => onDrop(e, col.id)}
                 onDragLeave={onDragLeave}>
-                <div style={{ background: col.bg, padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: col.fg }}>{col.label}</span>
-                  <span style={{ background: 'rgba(255,255,255,0.18)', color: W, fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>{cards.length}</span>
-                </div>
-                <div style={{ padding: '0.65rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                <ColHeader col={col} count={cards.length} />
+                <div style={{ padding: '0.6rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
                   {cards.length === 0 && (
-                    <div style={{ textAlign: 'center', color: '#2a2a2a', fontSize: '0.7rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '1.5rem', marginBottom: '1.5rem' }}>Empty</div>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: '2rem' }}>
+                      <span style={{ fontFamily: FONT, fontSize: '0.62rem', color: C.text3, letterSpacing: '1.5px', textTransform: 'uppercase' }}>Empty</span>
+                    </div>
                   )}
                   {cards.map(o => isDelivery ? (
-                    <DeliveryCard key={o.id} o={o} colId={col.id} allCols={cols} archiveColId={archiveColId}
+                    <DeliveryCard key={o.id} o={o} col={col} allCols={cols} archiveColId={archiveColId}
                       isMobile={isMobile} onMove={onMove} onDel={onDel}
                       expanded={expandedCards.has(o.id)} onToggle={() => onToggleExpand(o.id)}
                       onDragStart={onDragStart} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} />
                   ) : (
-                    <PickupCard key={o.id} o={o} colId={col.id} allCols={cols} archiveColId={archiveColId}
+                    <PickupCard key={o.id} o={o} col={col} allCols={cols} archiveColId={archiveColId}
                       isMobile={isMobile} onMove={onMove} onDel={onDel}
                       onDragStart={onDragStart} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} />
                   ))}
@@ -312,36 +557,18 @@ function BoardSection({ title, accentColor, cols, archiveColId, archiveLabel, or
             );
           })}
 
-          {/* Archive drop zone */}
-          <div data-col-id={archiveColId}
-            style={{ background: dragOver === archiveColId ? '#1a1a1a' : '#141414', border: dragOver === archiveColId ? '2px dashed #888' : '2px dashed #222', minHeight: isMobile ? 80 : 360, display: 'flex', flexDirection: 'column', transition: 'all 0.15s' }}
-            onDragOver={e => onDragOver(e, archiveColId)}
-            onDrop={e => onDrop(e, archiveColId)}
-            onDragLeave={onDragLeave}>
-            <div style={{ background: '#1a1a1a', padding: '0.8rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', color: dragOver === archiveColId ? '#888' : '#444' }}>{archiveLabel}</span>
-              <span style={{ background: 'rgba(255,255,255,0.05)', color: '#444', fontSize: '0.7rem', fontWeight: 900, padding: '0.1rem 0.5rem', borderRadius: 99 }}>{archivedCount}</span>
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem', padding: isMobile ? '1rem' : '2rem' }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-                stroke={dragOver === archiveColId ? '#888' : '#2a2a2a'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="21 8 21 21 3 21 3 8" />
-                <rect x="1" y="3" width="22" height="5" />
-                <line x1="10" y1="12" x2="14" y2="12" />
-              </svg>
-              <div style={{ fontSize: '0.62rem', color: dragOver === archiveColId ? '#777' : '#2a2a2a', letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8 }}>
-                {isMobile ? 'Tap DONE to archive' : (dragOver === archiveColId ? 'Drop to archive' : 'Drag here\nwhen done')}
-              </div>
-            </div>
-          </div>
+          <ArchiveDrop colId={archiveColId} label={archiveLabel} count={archivedCount}
+            over={dragOver === archiveColId} onDragOver={onDragOver} onDrop={onDrop} onDragLeave={onDragLeave} isMobile={isMobile} />
         </div>
       </div>
     </div>
   );
 }
 
-// ── MAIN APP ──────────────────────────────────────────────────────────────────
+// ── MAIN APP ───────────────────────────────────────────────────────────────────
 export default function App() {
+  useGlobalStyles();
+
   const [view, setView]                   = useState('customer');
   const [orders, setOrders]               = useState([]);
   const [archiveView, setArchiveView]     = useState(false);
@@ -354,6 +581,7 @@ export default function App() {
   const [pinInput, setPinInput]           = useState('');
   const [pinError, setPinError]           = useState('');
   const [pinLoading, setPinLoading]       = useState(false);
+  const [refreshing, setRefreshing]       = useState(false);
   const [isMobile, setIsMobile]           = useState(window.innerWidth <= 768);
   const [expandedCards, setExpandedCards] = useState(new Set());
   const dragId      = useRef(null);
@@ -362,15 +590,12 @@ export default function App() {
   const [form, setForm] = useState({ name: '', phone: '', order_text: '', pickup: '', notes: '' });
 
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
+    const h = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
   }, []);
 
-  useEffect(() => {
-    if (view === 'staff' && pin) loadOrders();
-  }, [view, pin]);
-
+  useEffect(() => { if (view === 'staff' && pin) loadOrders(); }, [view, pin]);
   useEffect(() => {
     if (view !== 'staff' || !pin) return;
     const t = setInterval(loadOrders, 20000);
@@ -382,12 +607,18 @@ export default function App() {
     if (ok) setOrders(data.orders || []);
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    await loadOrders();
+    setTimeout(() => setRefreshing(false), 500);
+  }
+
   async function handlePinSubmit() {
     if (!pinInput.trim()) return;
     setPinLoading(true); setPinError('');
     const { ok } = await callAPI('/api/verify-pin', { method: 'POST', body: { pin: pinInput.trim() } });
     if (ok) { setPin(pinInput.trim()); setPinInput(''); }
-    else setPinError('Incorrect PIN. Try again.');
+    else setPinError('Incorrect PIN.');
     setPinLoading(false);
   }
 
@@ -435,25 +666,21 @@ export default function App() {
 
   function onDragStart(e, id) { dragId.current = id; e.dataTransfer.effectAllowed = 'move'; }
   function onDragOver(e, col) { e.preventDefault(); setDragOver(col); }
-  function onDrop(e, col) {
-    e.preventDefault();
-    if (dragId.current) move(dragId.current, col);
-    dragId.current = null; setDragOver(null);
-  }
+  function onDrop(e, col) { e.preventDefault(); if (dragId.current) move(dragId.current, col); dragId.current = null; setDragOver(null); }
   function onDragLeave() { setDragOver(null); }
   function onTouchStart(e, id) { touchDragId.current = id; }
   function onTouchMove(e) {
     if (!touchDragId.current) return;
     e.preventDefault();
-    const touch = e.touches[0];
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const t = e.touches[0];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
     const col = el?.closest('[data-col-id]');
     setDragOver(col ? col.getAttribute('data-col-id') : null);
   }
   function onTouchEnd(e) {
     if (!touchDragId.current) return;
-    const touch = e.changedTouches[0];
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const t = e.changedTouches[0];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
     const col = el?.closest('[data-col-id]');
     if (col) move(touchDragId.current, col.getAttribute('data-col-id'));
     touchDragId.current = null; setDragOver(null);
@@ -461,44 +688,50 @@ export default function App() {
 
   const today = new Date().toISOString().split('T')[0];
   const m = isMobile;
+
   const inp = {
-    display: 'block', width: '100%', height: m ? 38 : 48,
-    border: BORDER, background: W, color: B, fontFamily: FONT,
-    fontSize: m ? '0.85rem' : '0.95rem', fontWeight: 600,
-    padding: m ? '0 0.7rem' : '0 0.85rem',
-    boxSizing: 'border-box', outline: 'none', borderRadius: 0,
-    appearance: 'none', WebkitAppearance: 'none',
+    display: 'block', width: '100%', height: m ? 44 : 50,
+    border: `1.5px solid #ddd`, background: '#fff', color: '#0a0a0a',
+    fontFamily: FONT, fontSize: '1rem', fontWeight: 600,
+    padding: '0 0.85rem', boxSizing: 'border-box', outline: 'none',
+    borderRadius: '3px', appearance: 'none', WebkitAppearance: 'none',
   };
   const lbl = {
-    display: 'block', fontSize: m ? '0.6rem' : '0.68rem',
-    fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase',
-    marginBottom: m ? '0.25rem' : '0.4rem', color: B,
+    display: 'block', fontSize: '0.65rem', fontWeight: 800,
+    letterSpacing: '1.5px', textTransform: 'uppercase',
+    marginBottom: '0.4rem', color: '#555',
   };
-  const fieldGap   = m ? '0.55rem' : '1.1rem';
-  const dividerGap = m ? '0.6rem' : '1.5rem';
 
-  // ── PIN ENTRY ──────────────────────────────────────────────────────────────
+  // ── PIN SCREEN ───────────────────────────────────────────────────────────────
   if (view === 'staff' && !pin) {
     return (
-      <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
-        <div style={{ width: '100%', maxWidth: 340 }}>
-          <Logo dark />
-          <div style={{ border: '2px solid #222', padding: '2rem', background: '#161616' }}>
-            <div style={{ fontSize: '0.68rem', fontWeight: 900, letterSpacing: '3px', textTransform: 'uppercase', color: '#666', marginBottom: '1.5rem', textAlign: 'center' }}>Staff Access</div>
-            <label style={{ ...lbl, color: '#666' }}>PIN</label>
-            <input type="password" inputMode="numeric" maxLength={8} value={pinInput} placeholder="Enter PIN"
+      <div style={{ fontFamily: FONT, background: C.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
+        <div style={{ width: '100%', maxWidth: 360 }}>
+          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            <Logo size={52} />
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: '2.5rem 2rem' }}>
+            <div style={{ fontFamily: FONT, fontSize: '0.62rem', fontWeight: 800, letterSpacing: '3px', textTransform: 'uppercase', color: C.text2, marginBottom: '2rem', textAlign: 'center' }}>
+              Staff Access
+            </div>
+            <label style={{ ...lbl, color: C.text2 }}>PIN</label>
+            <input
+              type="password" inputMode="numeric" maxLength={8} value={pinInput} placeholder="••••••••"
               onChange={e => { setPinInput(e.target.value); setPinError(''); }}
               onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
-              style={{ ...inp, background: '#1e1e1e', border: '2px solid #333', color: W, marginBottom: '1rem' }}
+              style={{ ...inp, background: C.surface2, border: `1.5px solid ${C.border}`, color: C.text1, marginBottom: '1rem', height: 52, fontSize: '1.2rem', letterSpacing: '4px' }}
               autoFocus />
-            {pinError && <div style={{ fontSize: '0.75rem', color: '#cc4444', fontWeight: 700, marginBottom: '0.75rem' }}>{pinError}</div>}
-            <button onClick={handlePinSubmit} disabled={pinLoading} style={{ ...btnBlack, opacity: pinLoading ? 0.6 : 1 }}>
+            {pinError && <div style={{ fontSize: '0.75rem', color: C.red, fontWeight: 700, marginBottom: '0.75rem' }}>{pinError}</div>}
+            <button
+              onClick={handlePinSubmit}
+              disabled={pinLoading}
+              style={{ display: 'block', width: '100%', height: 52, background: C.text1, color: C.bg, border: 'none', fontFamily: FONT, fontSize: '0.8rem', fontWeight: 900, letterSpacing: '2.5px', textTransform: 'uppercase', cursor: 'pointer', opacity: pinLoading ? 0.6 : 1 }}>
               {pinLoading ? 'Checking...' : 'Enter'}
             </button>
           </div>
           <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-            <span onClick={() => setView('customer')} style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#333', cursor: 'pointer' }}>
-              ← Back to Order Form
+            <span onClick={() => setView('customer')} style={{ fontFamily: FONT, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: C.text3, cursor: 'pointer' }}>
+              ← Order Form
             </span>
           </div>
         </div>
@@ -506,7 +739,7 @@ export default function App() {
     );
   }
 
-  // ── ARCHIVE VIEW ───────────────────────────────────────────────────────────
+  // ── ARCHIVE VIEW ─────────────────────────────────────────────────────────────
   if (view === 'staff' && pin && archiveView) {
     const q = archiveSearch.toLowerCase().trim();
     const archived = orders
@@ -515,67 +748,59 @@ export default function App() {
       .sort((a, b) => b.created_at - a.created_at);
 
     return (
-      <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box' }}>
-        <StaffHeader orders={orders} onRefresh={loadOrders}
-          onLock={() => { setPin(''); setView('customer'); }}
-          archiveView={archiveView} setArchiveView={setArchiveView} />
-        <div style={{ maxWidth: 720, margin: '0 auto' }}>
-          <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
-            <input type="text" placeholder="Search by name, phone, item, suburb…" value={archiveSearch}
+      <div style={{ fontFamily: FONT, background: C.bg, minHeight: '100vh', color: C.text1 }}>
+        <Header orders={orders} onRefresh={handleRefresh} onLock={() => { setPin(''); setView('customer'); }}
+          archiveView={archiveView} setArchiveView={setArchiveView} refreshing={refreshing} />
+        <div style={{ maxWidth: 780, margin: '0 auto', padding: '1.25rem' }}>
+          <div style={{ position: 'relative', marginBottom: '1rem' }}>
+            <input type="text" placeholder="Search orders…" value={archiveSearch}
               onChange={e => setArchiveSearch(e.target.value)}
-              style={{ display: 'block', width: '100%', height: 48, background: '#161616', border: '1px solid #333', color: W, fontFamily: FONT, fontSize: '0.9rem', fontWeight: 500, padding: '0 2.5rem 0 1rem', boxSizing: 'border-box', outline: 'none', borderRadius: 0 }} />
+              style={{ display: 'block', width: '100%', height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.text1, fontFamily: FONT, fontSize: '0.9rem', padding: '0 2.5rem 0 1rem', boxSizing: 'border-box', outline: 'none', borderRadius: '4px' }} />
             {archiveSearch && (
               <button onClick={() => setArchiveSearch('')}
-                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0 }}
-                onMouseEnter={e => e.currentTarget.style.color = '#aaa'}
-                onMouseLeave={e => e.currentTarget.style.color = '#555'}>×</button>
+                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: C.text2, fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
             )}
           </div>
-          <div style={{ fontSize: '0.62rem', color: '#444', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
-            {q ? `${archived.length} result${archived.length !== 1 ? 's' : ''} for "${archiveSearch}"` : `${archived.length} orders`}
+          <div style={{ fontFamily: FONT, fontSize: '0.6rem', color: C.text3, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
+            {archived.length} order{archived.length !== 1 ? 's' : ''}
           </div>
           {archived.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#333', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4rem' }}>
-              {q ? 'No matching orders' : 'No archived orders yet'}
+            <div style={{ textAlign: 'center', color: C.text3, fontSize: '0.75rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '4rem' }}>
+              {q ? 'No results' : 'No archived orders'}
             </div>
           )}
           {archived.map(o => {
-            const isDelivery = o.status === 'delivered';
-            const suburb = isDelivery ? [o.city, o.state_au].filter(Boolean).join(' ') : null;
+            const isDel  = o.status === 'delivered';
+            const suburb = isDel ? [o.city, o.state_au].filter(Boolean).join(' ') : null;
+            const typeColor = isDel ? C.blue : C.amber;
             return (
-              <div key={o.id} style={{ background: '#161616', border: '1px solid #222', padding: '1rem 1.25rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <div key={o.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${typeColor}`, padding: '1rem 1.15rem', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'baseline', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
-                    <div style={{ fontWeight: 900, fontSize: '0.9rem' }}>{o.name}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#666' }}>{o.phone}</div>
-                    <span style={{ fontSize: '0.52rem', padding: '0.12rem 0.45rem', border: `1px solid ${isDelivery ? '#1a3a5c' : '#2a2a2a'}`, color: isDelivery ? '#3a6a9a' : '#555', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                      {isDelivery ? 'Delivery' : 'Pickup'}
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 900, fontSize: '0.95rem', color: C.text1 }}>{o.name}</div>
+                    <span style={{ fontFamily: MONO, fontSize: '0.7rem', color: C.text2 }}>{o.phone}</span>
+                    <span style={{ fontFamily: FONT, fontSize: '0.52rem', fontWeight: 800, padding: '0.12rem 0.45rem', border: `1px solid ${typeColor}22`, color: typeColor, letterSpacing: '0.5px', textTransform: 'uppercase', borderRadius: '3px' }}>
+                      {isDel ? 'Delivery' : 'Pickup'}
                     </span>
-                    {isDelivery && o.woo_order_number && (
-                      <span style={{ fontSize: '0.52rem', color: '#444' }}>#{o.woo_order_number}</span>
-                    )}
+                    {isDel && o.woo_order_number && <span style={{ fontFamily: MONO, fontSize: '0.6rem', color: C.text3 }}>#{o.woo_order_number}</span>}
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: '#aaa', marginBottom: '0.35rem', lineHeight: 1.4 }}>{o.order_text}</div>
+                  <div style={{ fontSize: '0.82rem', color: C.text2, marginBottom: '0.35rem', lineHeight: 1.4 }}>{o.order_text}</div>
                   <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                    {isDelivery
-                      ? suburb && <div style={{ fontSize: '0.68rem', color: '#555' }}>📍 {suburb}</div>
-                      : <div style={{ fontSize: '0.68rem', color: '#555' }}>Pickup: {formatPickup(o.pickup)}</div>
-                    }
-                    <div style={{ fontSize: '0.68rem', color: '#444' }}>Ordered: {formatTime(o.created_at)}</div>
+                    {isDel ? suburb && <span style={{ fontSize: '0.68rem', color: C.text3 }}>📍 {suburb}</span>
+                            : <span style={{ fontSize: '0.68rem', color: C.text3 }}>Pickup: {formatPickup(o.pickup)}</span>}
+                    <span style={{ fontFamily: MONO, fontSize: '0.65rem', color: C.text3 }}>{formatTime(o.created_at)}</span>
                   </div>
-                  {o.notes && <div style={{ fontSize: '0.72rem', color: '#555', fontStyle: 'italic', marginTop: '0.25rem' }}>{o.notes}</div>}
+                  {o.notes && <div style={{ fontSize: '0.72rem', color: C.text3, fontStyle: 'italic', marginTop: '0.25rem' }}>{o.notes}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
-                  <button onClick={() => move(o.id, isDelivery ? 'del_received' : 'received')}
-                    style={{ background: 'none', border: '1px solid #333', color: '#555', fontFamily: FONT, fontSize: '0.58rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.3rem 0.5rem', cursor: 'pointer' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#666'; e.currentTarget.style.color = '#ccc'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#555'; }}>
+                  <button className="action-btn" onClick={() => move(o.id, isDel ? 'del_received' : 'received')}
+                    style={{ background: 'none', border: `1px solid ${C.border}`, color: C.text2, fontFamily: FONT, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.4rem 0.65rem', cursor: 'pointer', borderRadius: '3px' }}>
                     Restore
                   </button>
                   <button onClick={() => del(o.id)}
-                    style={{ background: 'none', border: 'none', color: '#3a3a3a', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.25rem' }}
-                    onMouseEnter={e => e.currentTarget.style.color = '#cc3333'}
-                    onMouseLeave={e => e.currentTarget.style.color = '#3a3a3a'}>×</button>
+                    style={{ background: 'none', border: 'none', color: C.text3, fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0.4rem 0.25rem' }}
+                    onMouseEnter={e => e.currentTarget.style.color = C.red}
+                    onMouseLeave={e => e.currentTarget.style.color = C.text3}>×</button>
                 </div>
               </div>
             );
@@ -585,9 +810,9 @@ export default function App() {
     );
   }
 
-  // ── STAFF BOARD ────────────────────────────────────────────────────────────
+  // ── STAFF BOARD ──────────────────────────────────────────────────────────────
   if (view === 'staff' && pin) {
-    const boardProps = {
+    const bp = {
       orders, isMobile, dragOver,
       onDragOver, onDrop, onDragLeave,
       onDragStart, onTouchStart, onTouchMove, onTouchEnd,
@@ -595,32 +820,36 @@ export default function App() {
       expandedCards, onToggleExpand: toggleExpand,
     };
     return (
-      <div style={{ fontFamily: FONT, background: '#111', minHeight: '100vh', color: W, padding: '1rem', boxSizing: 'border-box', width: '100%' }}>
-        <StaffHeader orders={orders} onRefresh={loadOrders}
-          onLock={() => { setPin(''); setView('customer'); }}
-          archiveView={archiveView} setArchiveView={setArchiveView} />
-        <BoardSection title="Pickup Orders"   accentColor="#2a5a2a" cols={PICKUP_COLS} archiveColId="picked_up" archiveLabel="Order Picked Up" {...boardProps} />
-        <BoardSection title="Delivery Orders" accentColor="#1a3a5c" cols={DEL_COLS}    archiveColId="delivered"  archiveLabel="Delivered"       {...boardProps} />
+      <div style={{ fontFamily: FONT, background: C.bg, minHeight: '100vh', color: C.text1 }}>
+        <Header orders={orders} onRefresh={handleRefresh} onLock={() => { setPin(''); setView('customer'); }}
+          archiveView={archiveView} setArchiveView={setArchiveView} refreshing={refreshing} />
+        <BoardSection title="Pickup Orders"   accentColor="#d97706" cols={PICKUP_COLS} archiveColId="picked_up" archiveLabel="Picked Up" {...bp} />
+        <BoardSection title="Delivery Orders" accentColor="#2563eb" cols={DEL_COLS}    archiveColId="delivered"  archiveLabel="Delivered"  {...bp} />
       </div>
     );
   }
 
-  // ── SUCCESS ────────────────────────────────────────────────────────────────
+  // ── SUCCESS ──────────────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: m ? '1rem' : '2rem 1rem' }}>
+      <div style={{ fontFamily: FONT, background: '#f8f8f8', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
         <div style={{ maxWidth: 440, width: '100%' }}>
-          <Logo small={m} />
-          <div style={{ background: W, border: BORDER, padding: m ? '1.5rem 1rem' : '3rem 2rem', textAlign: 'center' }}>
-            <div style={{ width: 44, height: 44, background: B, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', color: W, fontSize: '1.2rem', fontWeight: 900 }}>✓</div>
-            <div style={{ fontSize: m ? '1rem' : '1.2rem', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Order Placed</div>
-            <p style={{ fontSize: '0.82rem', color: '#666', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-              We've received your order and sent you a confirmation text. We'll SMS you when it's ready.
-            </p>
-            <button style={{ ...btnBlack, height: m ? 46 : 54 }} onClick={() => setSuccess(false)}>Place Another Order</button>
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <img src={LOGO_URL} alt="Dry Age Biltong" style={{ height: m ? 44 : 80, width: 'auto' }} />
           </div>
-          <div style={{ textAlign: 'center', marginTop: m ? '0.75rem' : '2rem' }}>
-            <span onClick={() => setView('staff')} style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#ccc', cursor: 'pointer' }}>
+          <div style={{ background: '#fff', border: '2px solid #0a0a0a', padding: m ? '1.5rem 1rem' : '3rem 2rem', textAlign: 'center' }}>
+            <div style={{ width: 48, height: 48, background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', color: '#fff', fontSize: '1.3rem' }}>✓</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem', color: '#0a0a0a' }}>Order Placed</div>
+            <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+              We've received your order and sent you a confirmation text. We'll SMS you when it's ready for pickup.
+            </p>
+            <button style={{ display: 'block', width: '100%', height: 52, background: '#0a0a0a', color: '#fff', border: 'none', fontFamily: FONT, fontSize: '0.8rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' }}
+              onClick={() => setSuccess(false)}>
+              Place Another Order
+            </button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
+            <span onClick={() => setView('staff')} style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#bbb', cursor: 'pointer' }}>
               Staff View
             </span>
           </div>
@@ -629,58 +858,63 @@ export default function App() {
     );
   }
 
-  // ── CUSTOMER FORM ──────────────────────────────────────────────────────────
+  // ── CUSTOMER FORM ────────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: FONT, background: G, minHeight: '100vh', padding: m ? '0.5rem' : '2rem 1rem', boxSizing: 'border-box' }}>
+    <div style={{ fontFamily: FONT, background: '#f8f8f8', minHeight: '100vh', padding: m ? '0.75rem' : '2rem 1rem', boxSizing: 'border-box' }}>
       <div style={{ maxWidth: 500, margin: '0 auto' }}>
-        <Logo small={m} />
-        <div style={{ background: W, border: BORDER, padding: m ? '0.85rem 0.85rem' : '2rem' }}>
-          <div style={{ fontSize: m ? '1.05rem' : '1.4rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.3px', marginBottom: m ? '0.1rem' : '0.2rem' }}>Place an Order</div>
-          {!m && <div style={{ fontSize: '0.78rem', color: '#888', marginBottom: '1.75rem' }}>Fresh pickup orders — Perth store only.</div>}
-          {m && <div style={{ marginBottom: '0.65rem' }} />}
-          <div style={{ marginBottom: fieldGap }}>
+        <div style={{ textAlign: 'center', marginBottom: m ? '0.75rem' : '1.75rem' }}>
+          <img src={LOGO_URL} alt="Dry Age Biltong" style={{ height: m ? 44 : 80, width: 'auto' }} />
+        </div>
+        <div style={{ background: '#fff', border: '2px solid #0a0a0a', padding: m ? '1rem' : '2rem' }}>
+          <div style={{ fontSize: m ? '1.1rem' : '1.4rem', fontWeight: 900, textTransform: 'uppercase', color: '#0a0a0a', marginBottom: m ? '0.25rem' : '0.25rem' }}>Place an Order</div>
+          {!m && <div style={{ fontSize: '0.78rem', color: '#888', marginBottom: '1.5rem' }}>Fresh pickup orders — Perth store only.</div>}
+          {m && <div style={{ marginBottom: '0.75rem' }} />}
+
+          <div style={{ marginBottom: m ? '0.75rem' : '1rem' }}>
             <label style={lbl}>Your Name</label>
-            <input style={{ ...inp, borderColor: errors.name ? '#cc0000' : B }} value={form.name} placeholder="Full name"
+            <input style={{ ...inp, borderColor: errors.name ? '#cc0000' : '#ddd' }} value={form.name} placeholder="Full name"
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
-          <div style={{ marginBottom: fieldGap }}>
-            <label style={lbl}>Phone / WhatsApp</label>
-            <input style={{ ...inp, borderColor: errors.phone ? '#cc0000' : B }} value={form.phone} placeholder="04XX XXX XXX" type="tel"
+          <div style={{ marginBottom: m ? '0.75rem' : '1rem' }}>
+            <label style={lbl}>Phone</label>
+            <input style={{ ...inp, borderColor: errors.phone ? '#cc0000' : '#ddd' }} value={form.phone} placeholder="04XX XXX XXX" type="tel"
               onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
             {!m && <div style={{ fontSize: '0.68rem', color: '#aaa', marginTop: '0.3rem' }}>We'll text you when your order is ready.</div>}
           </div>
-          <div style={{ borderTop: '1px solid #eee', margin: `${dividerGap} 0` }} />
-          <div style={{ marginBottom: fieldGap }}>
+          <div style={{ borderTop: '1px solid #eee', margin: m ? '0.75rem 0' : '1.25rem 0' }} />
+          <div style={{ marginBottom: m ? '0.75rem' : '1rem' }}>
             <label style={lbl}>What would you like?</label>
-            {!m && <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: '0.5rem' }}>Make sure to include quantity in kg.</div>}
-            <textarea
-              style={{ ...inp, height: 'auto', minHeight: m ? 55 : 100, padding: '0.6rem 0.7rem', resize: 'vertical', borderColor: errors.order_text ? '#cc0000' : B }}
+            {!m && <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: '0.4rem' }}>Include quantity in kg.</div>}
+            <textarea style={{ ...inp, height: 'auto', minHeight: m ? 70 : 100, padding: '0.65rem 0.85rem', resize: 'vertical', borderColor: errors.order_text ? '#cc0000' : '#ddd' }}
               value={form.order_text}
-              placeholder={m ? 'e.g. 2kg boerewors, 1kg biltong — include kg' : 'e.g. 2kg boerewors, 1kg biltong (sliced thin)'}
+              placeholder="e.g. 2kg boerewors, 1kg biltong (sliced thin)"
               onChange={e => setForm(f => ({ ...f, order_text: e.target.value }))} />
             {errors.order_text && <div style={{ fontSize: '0.7rem', color: '#cc0000', marginTop: '0.25rem', fontWeight: 700 }}>Please tell us what you would like.</div>}
           </div>
-          <div style={{ borderTop: '1px solid #eee', margin: `${dividerGap} 0` }} />
-          <div style={{ marginBottom: fieldGap }}>
+          <div style={{ borderTop: '1px solid #eee', margin: m ? '0.75rem 0' : '1.25rem 0' }} />
+          <div style={{ marginBottom: m ? '0.75rem' : '1rem' }}>
             <label style={lbl}>Pickup Date</label>
-            <input type="date" style={{ ...inp, borderColor: errors.pickup ? '#cc0000' : B }} value={form.pickup} min={today}
+            <input type="date" style={{ ...inp, borderColor: errors.pickup ? '#cc0000' : '#ddd' }} value={form.pickup} min={today}
               onChange={e => setForm(f => ({ ...f, pickup: e.target.value }))} />
           </div>
-          <div style={{ marginBottom: m ? '0.65rem' : '1.75rem' }}>
+          <div style={{ marginBottom: m ? '0.75rem' : '1.5rem' }}>
             <label style={lbl}>Notes (optional)</label>
-            <textarea style={{ ...inp, height: 'auto', minHeight: m ? 42 : 80, padding: '0.6rem 0.7rem', resize: 'vertical' }}
+            <textarea style={{ ...inp, height: 'auto', minHeight: m ? 50 : 80, padding: '0.65rem 0.85rem', resize: 'vertical' }}
               value={form.notes} placeholder="Any special requests..."
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
+
           {Object.keys(errors).filter(k => k !== 'order_text').length > 0 && (
-            <div style={{ fontSize: '0.72rem', color: '#cc0000', fontWeight: 700, marginBottom: '0.5rem' }}>Please fill in all required fields.</div>
+            <div style={{ fontSize: '0.72rem', color: '#cc0000', fontWeight: 700, marginBottom: '0.75rem' }}>Please fill in all required fields.</div>
           )}
-          <button style={{ ...btnBlack, height: m ? 44 : 54, fontSize: m ? '0.78rem' : '0.82rem', opacity: submitting ? 0.6 : 1 }} onClick={submit} disabled={submitting}>
+
+          <button style={{ display: 'block', width: '100%', height: m ? 48 : 54, background: '#0a0a0a', color: '#fff', border: 'none', fontFamily: FONT, fontSize: m ? '0.82rem' : '0.85rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer', opacity: submitting ? 0.6 : 1 }}
+            onClick={submit} disabled={submitting}>
             {submitting ? 'Placing Order...' : 'Place Order'}
           </button>
         </div>
-        <div style={{ textAlign: 'center', marginTop: m ? '0.5rem' : '1.75rem', paddingBottom: m ? '0.5rem' : 0 }}>
-          <span onClick={() => setView('staff')} style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#ccc', cursor: 'pointer', userSelect: 'none' }}>
+        <div style={{ textAlign: 'center', marginTop: m ? '0.75rem' : '1.5rem', paddingBottom: '1rem' }}>
+          <span onClick={() => setView('staff')} style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#bbb', cursor: 'pointer', userSelect: 'none' }}>
             Staff View
           </span>
         </div>
