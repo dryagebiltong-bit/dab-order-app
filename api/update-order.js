@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   if (!authorized(req)) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { id, status } = req.body || {};
+  const { id, status, tracking_number } = req.body || {};
   if (!id || !status) return res.status(400).json({ error: 'Missing fields' });
 
   const { data: order } = await supabase
@@ -17,12 +17,15 @@ export default async function handler(req, res) {
   if (!order) return res.status(404).json({ error: 'Order not found' });
   if (order.status === status) return res.status(200).json({ success: true });
 
+  const updates = { status };
+  if (tracking_number) updates.tracking_number = tracking_number;
+
   const { error } = await supabase
-    .from('orders').update({ status }).eq('id', id);
+    .from('orders').update(updates).eq('id', id);
 
   if (error) return res.status(500).json({ error: 'Could not update order' });
 
-  // SMS: pickup order ready
+  // SMS: pickup order ready for collection
   if (status === 'ready') {
     try {
       await sendSMS(
@@ -34,16 +37,21 @@ export default async function handler(req, res) {
     }
   }
 
-  // SMS: delivery order shipped
-  if (status === 'del_shipped') {
+  // SMS: delivery order shipped — send tracking number to customer
+  if (status === 'delivered' && tracking_number) {
     try {
       await sendSMS(
         order.phone,
-        `Hi ${order.name}, your order from ${SHOP} has been shipped! Keep an eye out for it in the next few days.`
+        `Hi ${order.name}, your ${SHOP} order is on its way! Track your parcel here: https://auspost.com.au/mypost/track/#/details/${tracking_number}`
       );
     } catch (e) {
       console.error('SMS error:', e.message);
     }
+  }
+
+  // Staff notification SMS
+  if (status === 'del_shipped' || status === 'delivered') {
+    // handled by notifyStaff in woo-order.js on creation — no duplicate needed here
   }
 
   return res.status(200).json({ success: true });
