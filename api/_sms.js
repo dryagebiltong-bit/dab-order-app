@@ -23,26 +23,8 @@ export async function sendSMS(to, message) {
 }
 
 export async function notifyStaff(message) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken  = process.env.TWILIO_AUTH_TOKEN;
-  const from       = process.env.TWILIO_WHATSAPP_FROM;
-  const staffNum   = process.env.STAFF_WHATSAPP_NUMBER;
-  if (!accountSid || !authToken || !from || !staffNum) return;
-
-  const digits = staffNum.replace(/\D/g, '');
-  const e164 = digits.startsWith('61')
-    ? `+${digits}`
-    : `+61${digits.startsWith('0') ? digits.slice(1) : digits}`;
-
-  await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ To: `whatsapp:${e164}`, From: from, Body: message }),
-    }
-  );
+  const numbers = process.env.STAFF_NOTIFY_NUMBERS;
+  if (!numbers) return;
+  const list = numbers.split(',').map(n => n.trim()).filter(Boolean);
+  await Promise.all(list.map(n => sendSMS(n, message).catch(e => console.error('Staff SMS error:', e.message))));
 }
