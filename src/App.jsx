@@ -23,16 +23,22 @@ const PICKUP_COLS = [
   { id: 'ready',     label: 'Ready for Pickup', color: GREEN,  dim: 'rgba(52,211,153,0.12)' },
 ];
 
-// Delivery only has 2 active columns — no Shipped column
 const DEL_COLS = [
-  { id: 'del_received',  label: 'New Order',  color: AMBER,  dim: 'rgba(245,158,11,0.12)' },
-  { id: 'del_preparing', label: 'Preparing',  color: INDIGO, dim: 'rgba(129,140,248,0.12)' },
+  { id: 'del_received',  label: 'New Order', color: AMBER,  dim: 'rgba(245,158,11,0.12)' },
+  { id: 'del_preparing', label: 'Preparing', color: INDIGO, dim: 'rgba(129,140,248,0.12)' },
 ];
 
 const PICKUP_STATUSES  = new Set(['received', 'preparing', 'ready']);
 const DEL_STATUSES     = new Set(['del_received', 'del_preparing']);
-// del_shipped treated as archive for any existing orders
-const ARCHIVE_STATUSES = new Set(['picked_up', 'delivered', 'del_shipped']);
+const ARCHIVE_STATUSES = new Set(['picked_up', 'shipped', 'del_shipped']);
+
+// Detect if an order is a delivery order
+function isDeliveryOrder(o) {
+  return o.order_type === 'delivery' ||
+    DEL_STATUSES.has(o.status) ||
+    o.status === 'shipped' ||
+    o.status === 'del_shipped';
+}
 
 function timeAgo(ts) {
   const m = Math.floor((Date.now() - ts) / 60000);
@@ -50,12 +56,17 @@ function formatPickup(d) {
   });
 }
 function formatTime(ts) {
-  return new Date(ts).toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleString('en-AU', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
 }
 async function callAPI(path, options = {}, pin = null) {
   const headers = { 'Content-Type': 'application/json' };
   if (pin) headers['x-staff-pin'] = pin;
-  const res = await fetch(path, { ...options, headers, body: options.body ? JSON.stringify(options.body) : undefined });
+  const res = await fetch(path, {
+    ...options, headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
   return { ok: res.ok, data: await res.json() };
 }
 
@@ -85,8 +96,8 @@ function GlobalStyles() {
   return null;
 }
 
-// ── TRACKING INPUT STEP ────────────────────────────────────────────────────────
-function TrackingStep({ order, onConfirm, onBack }) {
+// ── TRACKING INPUT ─────────────────────────────────────────────────────────────
+function TrackingModal({ order, onConfirm, onCancel }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState(false);
 
@@ -96,74 +107,86 @@ function TrackingStep({ order, onConfirm, onBack }) {
   }
 
   return (
-    <div style={{ padding: '1.5rem' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <button className="btn-tap" onClick={onBack}
-          style={{ background: 'none', border: 'none', color: T2, cursor: 'pointer', fontSize: '1.2rem', padding: 0, lineHeight: 1 }}>
-          ←
-        </button>
-        <div>
-          <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3 }}>Shipping</div>
-          <div style={{ fontSize: '1.1rem', fontWeight: 900, color: T1 }}>{order.name}</div>
+    <div className="fade" style={{
+      position: 'fixed', inset: 0, zIndex: 300,
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+    }}>
+      <div onClick={onCancel} style={{
+        position: 'absolute', inset: 0,
+        background: 'rgba(0,0,0,0.8)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }} />
+      <div className="sheet" style={{
+        position: 'relative',
+        background: SURFACE,
+        borderRadius: '20px 20px 0 0',
+        padding: '12px 0 0',
+        maxHeight: '75vh',
+        overflow: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ width: 40, height: 4, background: BORDER, borderRadius: 2 }} />
+        </div>
+
+        <div style={{ padding: '0 1.5rem 2rem' }}>
+          {/* Order summary */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3, marginBottom: '0.3rem' }}>
+              Shipping Order
+            </div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: T1, marginBottom: '0.2rem' }}>{order.name}</div>
+            <div style={{ fontFamily: MONO, fontSize: '0.85rem', color: T2 }}>{order.phone}</div>
+          </div>
+
+          {/* Instruction */}
+          <div style={{ background: BG, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${AMBER}`, borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: AMBER, marginBottom: '0.4rem' }}>
+              📮 Enter AusPost Tracking Number
+            </div>
+            <div style={{ fontSize: '0.85rem', color: T2, lineHeight: 1.6 }}>
+              Enter the tracking number from the AusPost receipt. The customer will receive an SMS with a link to track their parcel.
+            </div>
+          </div>
+
+          {/* Input */}
+          <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: T2, marginBottom: '0.5rem' }}>
+            Tracking Number
+          </label>
+          <input
+            className={error ? 'shake' : ''}
+            type="text"
+            value={value}
+            onChange={e => { setValue(e.target.value.toUpperCase()); setError(false); }}
+            placeholder="e.g. 33N00012345678901234"
+            autoFocus
+            style={{
+              display: 'block', width: '100%', height: 60,
+              background: BG,
+              border: `2px solid ${error ? RED : (value ? GREEN : BORDER)}`,
+              color: T1, fontFamily: MONO, fontSize: '1.05rem', fontWeight: 700,
+              padding: '0 1rem', borderRadius: '10px', outline: 'none',
+              letterSpacing: '1.5px', marginBottom: error ? '0.4rem' : '1.5rem',
+              transition: 'border-color 0.15s',
+            }} />
+          {error && <div style={{ fontSize: '0.78rem', color: RED, fontWeight: 700, marginBottom: '1.25rem' }}>Please enter the tracking number before confirming.</div>}
+
+          <button className="btn-tap" onClick={confirm}
+            style={{ display: 'block', width: '100%', height: 64, background: GREEN, color: '#000', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '1.05rem', fontWeight: 900, letterSpacing: '0.5px', cursor: 'pointer', marginBottom: '0.75rem' }}>
+            ✓ Confirm — Send Tracking to Customer
+          </button>
+          <button className="btn-tap" onClick={onCancel}
+            style={{ display: 'block', width: '100%', height: 50, background: 'none', border: `1px solid ${BORDER}`, color: T3, borderRadius: '10px', fontFamily: FONT, fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
         </div>
       </div>
-
-      {/* Instruction */}
-      <div style={{ background: BG, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${AMBER}`, borderRadius: '8px', padding: '1rem', marginBottom: '1.5rem' }}>
-        <div style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: AMBER, marginBottom: '0.4rem' }}>
-          📮 Enter AusPost Tracking Number
-        </div>
-        <div style={{ fontSize: '0.85rem', color: T2, lineHeight: 1.6 }}>
-          Enter the tracking number from the AusPost receipt. The customer will automatically receive an SMS with a tracking link.
-        </div>
-      </div>
-
-      {/* Input */}
-      <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: T2, marginBottom: '0.5rem' }}>
-        Tracking Number
-      </label>
-      <input
-        className={error ? 'shake' : ''}
-        type="text"
-        value={value}
-        onChange={e => { setValue(e.target.value.toUpperCase()); setError(false); }}
-        placeholder="e.g. 33N00012345678901234"
-        autoFocus
-        style={{
-          display: 'block', width: '100%', height: 56,
-          background: BG, border: `2px solid ${error ? RED : (value ? AMBER : BORDER)}`,
-          color: T1, fontFamily: MONO, fontSize: '1rem', fontWeight: 700,
-          padding: '0 1rem', borderRadius: '10px', outline: 'none',
-          letterSpacing: '1.5px', marginBottom: error ? '0.4rem' : '1.5rem',
-          transition: 'border-color 0.15s',
-        }} />
-      {error && <div style={{ fontSize: '0.75rem', color: RED, fontWeight: 700, marginBottom: '1.25rem' }}>Please enter the tracking number.</div>}
-
-      {/* Confirm */}
-      <button className="btn-tap" onClick={confirm}
-        style={{
-          display: 'block', width: '100%', height: 62,
-          background: GREEN, color: '#000',
-          border: 'none', borderRadius: '12px',
-          fontFamily: FONT, fontSize: '1rem', fontWeight: 900,
-          letterSpacing: '0.5px', cursor: 'pointer',
-          marginBottom: '0.75rem',
-        }}>
-        ✓ Confirm & Send Tracking to Customer
-      </button>
-      <button className="btn-tap" onClick={onBack}
-        style={{ display: 'block', width: '100%', height: 48, background: 'none', border: `1px solid ${BORDER}`, color: T3, borderRadius: '10px', fontFamily: FONT, fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>
-        Cancel
-      </button>
     </div>
   );
 }
 
 // ── ORDER DETAIL MODAL ─────────────────────────────────────────────────────────
-function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onClose }) {
-  const [trackingStep, setTrackingStep] = useState(false);
-
+function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onShip, onDel, onClose }) {
   const col       = cols.find(c => c.id === order.status);
   const colIdx    = cols.findIndex(c => c.id === order.status);
   const nextCol   = cols[colIdx + 1] || null;
@@ -175,25 +198,6 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
     [order.city, order.state_au, order.postcode].filter(Boolean).join(' '),
   ].filter(Boolean).join('\n');
 
-  function handleShip(trackingNumber) {
-    onMove(order.id, 'delivered', trackingNumber);
-    onClose();
-  }
-
-  if (trackingStep) {
-    return (
-      <div className="fade" style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-        <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} />
-        <div className="sheet" style={{ position: 'relative', background: SURFACE, borderRadius: '20px 20px 0 0', maxHeight: '92vh', overflow: 'auto' }}>
-          <div style={{ padding: '12px 0 0', display: 'flex', justifyContent: 'center' }}>
-            <div style={{ width: 40, height: 4, background: BORDER, borderRadius: 2 }} />
-          </div>
-          <TrackingStep order={order} onConfirm={handleShip} onBack={() => setTrackingStep(false)} />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fade" style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} />
@@ -204,6 +208,7 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
 
         {/* Scrollable content */}
         <div style={{ overflow: 'auto', flex: 1, padding: '1.25rem 1.5rem' }}>
+          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
             <div>
               <div style={{ fontSize: '1.5rem', fontWeight: 900, color: T1, lineHeight: 1.2, marginBottom: '0.35rem' }}>{order.name}</div>
@@ -222,6 +227,7 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
             </div>
           </div>
 
+          {/* Delivery address */}
           {isDelivery && fullAddress && (
             <div style={{ background: BG, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${BLUE}`, padding: '1rem 1.1rem', borderRadius: '8px', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3, marginBottom: '0.5rem' }}>📦 Delivery Address</div>
@@ -229,11 +235,13 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
             </div>
           )}
 
+          {/* Order */}
           <div style={{ background: BG, border: `1px solid ${BORDER}`, padding: '1rem 1.1rem', borderRadius: '8px', marginBottom: '1rem' }}>
             <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3, marginBottom: '0.5rem' }}>🛍️ Order</div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: T1, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>{order.order_text}</div>
           </div>
 
+          {/* Pickup date */}
           {!isDelivery && order.pickup && (
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3, marginBottom: '0.35rem' }}>📅 Pickup Date</div>
@@ -241,6 +249,7 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
             </div>
           )}
 
+          {/* Notes */}
           {order.notes && (
             <div style={{ background: BG, border: `1px solid ${BORDER}`, padding: '0.85rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3, marginBottom: '0.35rem' }}>💬 Notes</div>
@@ -248,6 +257,7 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
             </div>
           )}
 
+          {/* Tracking number if already set */}
           {order.tracking_number && (
             <div style={{ background: BG, border: `1px solid ${GREEN}44`, borderLeft: `4px solid ${GREEN}`, padding: '0.85rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
               <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: GREEN, marginBottom: '0.35rem' }}>📮 Tracking Number</div>
@@ -258,27 +268,19 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
           <div style={{ fontFamily: MONO, fontSize: '0.65rem', color: T3, marginBottom: '1.5rem' }}>{formatTime(order.created_at)}</div>
         </div>
 
-        {/* Actions */}
+        {/* Action buttons */}
         <div style={{ padding: '1rem 1.5rem 1.5rem', borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', gap: '0.6rem', flexShrink: 0, background: SURFACE }}>
 
-          {/* Delivery: last col = show ship button */}
+          {/* Delivery last column → ship button */}
           {isDelivery && isLastCol && (
-            <button className="btn-tap" onClick={() => setTrackingStep(true)}
-              style={{ height: 62, background: AMBER, color: '#000', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '1rem', fontWeight: 900, cursor: 'pointer' }}>
+            <button className="btn-tap" onClick={() => { onClose(); onShip(order); }}
+              style={{ height: 64, background: AMBER, color: '#000', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '1.05rem', fontWeight: 900, cursor: 'pointer' }}>
               📮 Ship Order — Enter Tracking Number
             </button>
           )}
 
-          {/* Pickup: show next col button */}
-          {!isDelivery && nextCol && (
-            <button className="btn-tap" onClick={() => { onMove(order.id, nextCol.id); onClose(); }}
-              style={{ height: 62, background: nextCol.color, color: '#000', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '1rem', fontWeight: 900, cursor: 'pointer' }}>
-              → Mark as {nextCol.label}
-            </button>
-          )}
-
-          {/* Delivery non-last col: next */}
-          {isDelivery && !isLastCol && nextCol && (
+          {/* Move to next column */}
+          {nextCol && !(isDelivery && isLastCol) && (
             <button className="btn-tap" onClick={() => { onMove(order.id, nextCol.id); onClose(); }}
               style={{ height: 62, background: nextCol.color, color: '#000', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '1rem', fontWeight: 900, cursor: 'pointer' }}>
               → Mark as {nextCol.label}
@@ -286,7 +288,7 @@ function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onDel, onCl
           )}
 
           <div style={{ display: 'flex', gap: '0.6rem' }}>
-            {/* Only show Done for non-delivery-last, or for pickup */}
+            {/* Done — only show for pickup, or delivery non-last col */}
             {(!isDelivery || !isLastCol) && (
               <button className="btn-tap" onClick={() => { onMove(order.id, archiveColId); onClose(); }}
                 style={{ flex: 1, height: 54, background: 'none', border: `2px solid ${GREEN}55`, color: GREEN, borderRadius: '12px', fontFamily: FONT, fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer' }}>
@@ -377,17 +379,20 @@ function KanbanBoard({ orders, cols, archiveColId, archiveLabel, isDelivery, isM
           );
         })}
 
-        {/* Archive drop zone */}
+        {/* Archive / Shipped drop zone */}
         <div data-col-id={archiveColId} onDragOver={e => onDragOver(e, archiveColId)} onDrop={e => onDrop(e, archiveColId)} onDragLeave={onDragLeave}
-          style={{ border: `2px dashed ${dragOver === archiveColId ? T2 : BORDER}`, borderRadius: '12px', minHeight: isMobile ? 80 : 400, display: 'flex', flexDirection: 'column', background: dragOver === archiveColId ? SURFACE2 : 'transparent', transition: 'all 0.15s' }}>
+          style={{ border: `2px dashed ${dragOver === archiveColId ? (isDelivery ? AMBER : GREEN) : BORDER}`, borderRadius: '12px', minHeight: isMobile ? 80 : 400, display: 'flex', flexDirection: 'column', background: dragOver === archiveColId ? SURFACE2 : 'transparent', transition: 'all 0.15s' }}>
           <div style={{ padding: '0.85rem 1rem', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 900, letterSpacing: '1.5px', textTransform: 'uppercase', color: T3 }}>{archiveLabel}</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 900, letterSpacing: '1.5px', textTransform: 'uppercase', color: dragOver === archiveColId ? (isDelivery ? AMBER : GREEN) : T3 }}>{archiveLabel}</span>
             {archivedCount > 0 && <span style={{ fontFamily: MONO, fontSize: '0.8rem', color: T3 }}>{archivedCount}</span>}
           </div>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', padding: '1.5rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>📦</span>
+            <span style={{ fontSize: '1.5rem' }}>{isDelivery ? '📮' : '✓'}</span>
             <span style={{ fontSize: '0.7rem', color: dragOver === archiveColId ? T2 : T3, letterSpacing: '1px', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.8 }}>
-              {isMobile ? 'Tap Done on a card' : (dragOver === archiveColId ? 'Release to archive' : 'Drag here\nwhen complete')}
+              {isDelivery
+                ? (dragOver === archiveColId ? 'Drop to enter tracking' : 'Drag here\nto ship order')
+                : (dragOver === archiveColId ? 'Release to archive' : 'Drag here\nwhen complete')
+              }
             </span>
           </div>
         </div>
@@ -405,63 +410,66 @@ function ArchiveList({ orders, onMove, onDel }) {
     .filter(o => !q || [o.name, o.phone, o.order_text, o.city, o.woo_order_number, o.tracking_number].some(f => (f || '').toLowerCase().includes(q)))
     .sort((a, b) => b.created_at - a.created_at);
 
-  const isDel = o => o.status === 'delivered' || o.status === 'del_shipped';
-
   return (
     <div style={{ padding: '1rem' }}>
-      <input type="text" placeholder="Search archived orders…" value={search} onChange={e => setSearch(e.target.value)}
+      <input type="text" placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)}
         style={{ display: 'block', width: '100%', height: 50, background: SURFACE, border: `1px solid ${BORDER}`, color: T1, fontFamily: FONT, fontSize: '0.95rem', padding: '0 1rem', borderRadius: '10px', outline: 'none', marginBottom: '1rem' }} />
       {list.length === 0 && <div style={{ textAlign: 'center', color: T3, marginTop: '3rem', fontSize: '0.85rem', letterSpacing: '1px', textTransform: 'uppercase' }}>{q ? 'No results' : 'No archived orders yet'}</div>}
-      {list.map(o => (
-        <div key={o.id} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${isDel(o) ? BLUE : AMBER}`, borderRadius: '10px', padding: '1rem 1.1rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-              <span style={{ fontWeight: 900, fontSize: '1rem', color: T1 }}>{o.name}</span>
-              <span style={{ fontFamily: MONO, fontSize: '0.75rem', color: T2 }}>{o.phone}</span>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, padding: '0.15rem 0.5rem', border: `1px solid ${isDel(o) ? BLUE : AMBER}44`, color: isDel(o) ? BLUE : AMBER, borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {isDel(o) ? 'Delivery' : 'Pickup'}
-              </span>
-            </div>
-            <div style={{ fontSize: '0.85rem', color: T2, lineHeight: 1.5, marginBottom: '0.35rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-              {o.order_text}
-            </div>
-            {o.tracking_number && (
-              <div style={{ fontFamily: MONO, fontSize: '0.7rem', color: GREEN, marginBottom: '0.25rem' }}>
-                📮 {o.tracking_number}
+      {list.map(o => {
+        const isDel = isDeliveryOrder(o);
+        return (
+          <div key={o.id} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderLeft: `4px solid ${isDel ? BLUE : AMBER}`, borderRadius: '10px', padding: '1rem 1.1rem', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                <span style={{ fontWeight: 900, fontSize: '1rem', color: T1 }}>{o.name}</span>
+                <span style={{ fontFamily: MONO, fontSize: '0.75rem', color: T2 }}>{o.phone}</span>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, padding: '0.15rem 0.5rem', border: `1px solid ${isDel ? BLUE : AMBER}44`, color: isDel ? BLUE : AMBER, borderRadius: '20px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {isDel ? 'Shipped' : 'Pickup'}
+                </span>
+                {isDel && o.woo_order_number && <span style={{ fontFamily: MONO, fontSize: '0.65rem', color: T3 }}>#{o.woo_order_number}</span>}
               </div>
-            )}
-            <div style={{ fontFamily: MONO, fontSize: '0.65rem', color: T3 }}>{formatTime(o.created_at)}</div>
+              <div style={{ fontSize: '0.85rem', color: T2, lineHeight: 1.5, marginBottom: '0.35rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {o.order_text}
+              </div>
+              {o.tracking_number && (
+                <div style={{ fontFamily: MONO, fontSize: '0.72rem', color: GREEN, fontWeight: 700, marginBottom: '0.25rem' }}>
+                  📮 {o.tracking_number}
+                </div>
+              )}
+              <div style={{ fontFamily: MONO, fontSize: '0.65rem', color: T3 }}>{formatTime(o.created_at)}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
+              <button className="btn-tap" onClick={() => onMove(o.id, isDel ? 'del_received' : 'received')}
+                style={{ background: 'none', border: `1px solid ${BORDER}`, color: T2, fontFamily: FONT, fontSize: '0.7rem', fontWeight: 700, padding: '0.4rem 0.65rem', cursor: 'pointer', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                Restore
+              </button>
+              <button className="btn-tap" onClick={() => onDel(o.id)}
+                style={{ background: 'none', border: 'none', color: T3, fontSize: '1.2rem', cursor: 'pointer', textAlign: 'center', borderRadius: '6px', padding: '0.2rem' }}>×</button>
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
-            <button className="btn-tap" onClick={() => onMove(o.id, isDel(o) ? 'del_received' : 'received')}
-              style={{ background: 'none', border: `1px solid ${BORDER}`, color: T2, fontFamily: FONT, fontSize: '0.7rem', fontWeight: 700, padding: '0.4rem 0.65rem', cursor: 'pointer', borderRadius: '6px', whiteSpace: 'nowrap' }}>
-              Restore
-            </button>
-            <button className="btn-tap" onClick={() => onDel(o.id)}
-              style={{ background: 'none', border: 'none', color: T3, fontSize: '1.2rem', cursor: 'pointer', textAlign: 'center', borderRadius: '6px', padding: '0.2rem' }}>×</button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView]           = useState('customer');
-  const [orders, setOrders]       = useState([]);
-  const [activeTab, setActiveTab] = useState('pickup');
+  const [view, setView]               = useState('customer');
+  const [orders, setOrders]           = useState([]);
+  const [activeTab, setActiveTab]     = useState('pickup');
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [success, setSuccess]     = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors]       = useState({});
-  const [dragOver, setDragOver]   = useState(null);
-  const [pin, setPin]             = useState('');
-  const [pinInput, setPinInput]   = useState('');
-  const [pinError, setPinError]   = useState('');
-  const [pinLoading, setPinLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [isMobile, setIsMobile]   = useState(window.innerWidth <= 768);
+  const [pendingShipOrder, setPendingShipOrder] = useState(null); // delivery order awaiting tracking
+  const [success, setSuccess]         = useState(false);
+  const [submitting, setSubmitting]   = useState(false);
+  const [errors, setErrors]           = useState({});
+  const [dragOver, setDragOver]       = useState(null);
+  const [pin, setPin]                 = useState('');
+  const [pinInput, setPinInput]       = useState('');
+  const [pinError, setPinError]       = useState('');
+  const [pinLoading, setPinLoading]   = useState(false);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [isMobile, setIsMobile]       = useState(window.innerWidth <= 768);
   const dragId      = useRef(null);
   const touchDragId = useRef(null);
 
@@ -517,7 +525,6 @@ export default function App() {
     setSubmitting(false);
   }
 
-  // move accepts optional trackingNumber for delivery ship flow
   async function move(id, newStatus, trackingNumber = null) {
     const order = orders.find(o => o.id === id);
     if (!order || order.status === newStatus) return;
@@ -534,7 +541,22 @@ export default function App() {
 
   function onDragStart(e, id) { dragId.current = id; e.dataTransfer.effectAllowed = 'move'; }
   function onDragOver(e, col) { e.preventDefault(); setDragOver(col); }
-  function onDrop(e, col) { e.preventDefault(); if (dragId.current) move(dragId.current, col); dragId.current = null; setDragOver(null); }
+
+  // Intercept drop: if delivery order dropped to shipped zone → prompt for tracking
+  function onDrop(e, col) {
+    e.preventDefault();
+    if (dragId.current) {
+      const order = orders.find(o => o.id === dragId.current);
+      if (col === 'shipped' && order && isDeliveryOrder(order)) {
+        setPendingShipOrder(order);
+      } else {
+        move(dragId.current, col);
+      }
+    }
+    dragId.current = null;
+    setDragOver(null);
+  }
+
   function onDragLeave() { setDragOver(null); }
   function onTouchStart(e, id) { touchDragId.current = id; }
   function onTouchMove(e) {
@@ -550,8 +572,17 @@ export default function App() {
     const t = e.changedTouches[0];
     const el = document.elementFromPoint(t.clientX, t.clientY);
     const col = el?.closest('[data-col-id]');
-    if (col) move(touchDragId.current, col.getAttribute('data-col-id'));
-    touchDragId.current = null; setDragOver(null);
+    if (col) {
+      const colId = col.getAttribute('data-col-id');
+      const order = orders.find(o => o.id === touchDragId.current);
+      if (colId === 'shipped' && order && isDeliveryOrder(order)) {
+        setPendingShipOrder(order);
+      } else {
+        move(touchDragId.current, colId);
+      }
+    }
+    touchDragId.current = null;
+    setDragOver(null);
   }
 
   const pickupActive   = orders.filter(o => PICKUP_STATUSES.has(o.status)).length;
@@ -568,7 +599,7 @@ export default function App() {
     onCardTap: setSelectedOrder,
   };
 
-  // ── PIN ───────────────────────────────────────────────────────────────────────
+  // ── PIN ────────────────────────────────────────────────────────────────────────
   if (view === 'staff' && !pin) {
     return (
       <>
@@ -602,7 +633,7 @@ export default function App() {
     );
   }
 
-  // ── STAFF BOARD ──────────────────────────────────────────────────────────────
+  // ── STAFF BOARD ────────────────────────────────────────────────────────────────
   if (view === 'staff' && pin) {
     const tabs = [
       { id: 'pickup',   label: 'Pickup Orders',  count: pickupActive,   color: AMBER },
@@ -613,8 +644,10 @@ export default function App() {
     return (
       <>
         <GlobalStyles />
+
+        {/* Top bar */}
         <div style={{ position: 'sticky', top: 0, zIndex: 100, background: BG, borderBottom: `1px solid ${BORDER}`, padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>{LOGO_URL ? <img src={LOGO_URL} alt="" style={{ height: 36, filter: 'invert(1)', width: 'auto' }} /> : <span style={{ fontSize: '0.9rem', fontWeight: 900, color: T1, letterSpacing: '2px', textTransform: 'uppercase' }}>DAB</span>}</div>
+          <div>{LOGO_URL ? <img src={LOGO_URL} alt="" style={{ height: 36, filter: 'invert(1)', width: 'auto' }} /> : <span style={{ fontSize: '0.9rem', fontWeight: 900, color: T1 }}>DAB</span>}</div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button className="btn-tap" onClick={handleRefresh} style={{ height: 40, padding: '0 1rem', background: SURFACE, border: `1px solid ${BORDER}`, color: T2, fontFamily: FONT, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: '8px' }}>
               {refreshing ? '...' : '↻ Refresh'}
@@ -625,6 +658,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Tab bar */}
         <div style={{ position: 'sticky', top: '57px', zIndex: 99, background: BG, borderBottom: `1px solid ${BORDER}`, display: 'flex' }}>
           {tabs.map(tab => {
             const active = activeTab === tab.id;
@@ -638,32 +672,40 @@ export default function App() {
           })}
         </div>
 
+        {/* Content */}
         <div style={{ paddingTop: '0.85rem', paddingBottom: '2rem', minHeight: 'calc(100vh - 120px)' }}>
-          {activeTab === 'pickup'   && <KanbanBoard cols={PICKUP_COLS} archiveColId="picked_up" archiveLabel="Picked Up" isDelivery={false} {...boardProps} />}
-          {activeTab === 'delivery' && <KanbanBoard cols={DEL_COLS}    archiveColId="delivered"  archiveLabel="Delivered"  isDelivery={true}  {...boardProps} />}
+          {activeTab === 'pickup'   && <KanbanBoard cols={PICKUP_COLS} archiveColId="picked_up" archiveLabel="Picked Up ✓" isDelivery={false} {...boardProps} />}
+          {activeTab === 'delivery' && <KanbanBoard cols={DEL_COLS}    archiveColId="shipped"    archiveLabel="Shipped 📮"   isDelivery={true}  {...boardProps} />}
           {activeTab === 'archive'  && <ArchiveList orders={orders} onMove={move} onDel={del} />}
         </div>
 
+        {/* Order detail modal */}
         {selectedOrder && (() => {
-          const isDelivery = DEL_STATUSES.has(selectedOrder.status) || ARCHIVE_STATUSES.has(selectedOrder.status);
-          const cols       = isDelivery ? DEL_COLS : PICKUP_COLS;
-          const archiveId  = isDelivery ? 'delivered' : 'picked_up';
+          const isDel    = isDeliveryOrder(selectedOrder);
+          const cols     = isDel ? DEL_COLS : PICKUP_COLS;
+          const archiveId = isDel ? 'shipped' : 'picked_up';
           return (
             <OrderModal
-              order={selectedOrder} cols={cols} archiveColId={archiveId} isDelivery={isDelivery}
-              onMove={(id, status, tracking) => {
-                move(id, status, tracking);
-                setSelectedOrder(null);
-              }}
+              order={selectedOrder} cols={cols} archiveColId={archiveId} isDelivery={isDel}
+              onMove={(id, status) => { move(id, status); setSelectedOrder(null); }}
+              onShip={order => { setSelectedOrder(null); setPendingShipOrder(order); }}
               onDel={id => { del(id); setSelectedOrder(null); }}
               onClose={() => setSelectedOrder(null)} />
           );
         })()}
+
+        {/* Tracking prompt — shown for both drag AND tap flows */}
+        {pendingShipOrder && (
+          <TrackingModal
+            order={pendingShipOrder}
+            onConfirm={tracking => { move(pendingShipOrder.id, 'shipped', tracking); setPendingShipOrder(null); }}
+            onCancel={() => setPendingShipOrder(null)} />
+        )}
       </>
     );
   }
 
-  // ── SUCCESS ──────────────────────────────────────────────────────────────────
+  // ── SUCCESS ────────────────────────────────────────────────────────────────────
   if (success) {
     return (
       <>
@@ -674,7 +716,7 @@ export default function App() {
             <div style={{ background: '#fff', border: '2px solid #111827', borderRadius: '16px', padding: m ? '1.5rem' : '2.5rem', textAlign: 'center' }}>
               <div style={{ width: 52, height: 52, background: '#111827', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem', fontSize: '1.4rem' }}>✓</div>
               <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#111827', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem' }}>Order Placed</div>
-              <p style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '1.75rem', lineHeight: 1.7 }}>We've received your order and sent you a confirmation SMS. We'll text you when it's ready for pickup.</p>
+              <p style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '1.75rem', lineHeight: 1.7 }}>We've received your order and sent you a confirmation SMS. We'll text you when it's ready.</p>
               <button className="btn-tap" onClick={() => setSuccess(false)} style={{ display: 'block', width: '100%', height: 54, background: '#111827', color: '#fff', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '0.9rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' }}>
                 Place Another Order
               </button>
@@ -688,7 +730,7 @@ export default function App() {
     );
   }
 
-  // ── CUSTOMER FORM ────────────────────────────────────────────────────────────
+  // ── CUSTOMER FORM ──────────────────────────────────────────────────────────────
   const inp = { display: 'block', width: '100%', height: m ? 48 : 52, border: '1.5px solid #d1d5db', background: '#fff', color: '#111827', fontFamily: FONT, fontSize: '1rem', fontWeight: 600, padding: '0 1rem', boxSizing: 'border-box', outline: 'none', borderRadius: '10px', appearance: 'none', WebkitAppearance: 'none' };
   const lbl = { display: 'block', fontSize: '0.7rem', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.45rem', color: '#374151' };
 
