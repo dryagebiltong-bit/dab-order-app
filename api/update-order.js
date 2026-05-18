@@ -37,21 +37,16 @@ export default async function handler(req, res) {
     }
   }
 
-  // SMS: delivery order shipped — send tracking number to customer
-  if (status === 'delivered' && tracking_number) {
+  // SMS: delivery order shipped — send AusPost tracking link to customer
+  if (status === 'shipped' && tracking_number) {
     try {
       await sendSMS(
         order.phone,
-        `Hi ${order.name}, your ${SHOP} order is on its way! Track your parcel here: https://auspost.com.au/mypost/track/#/details/${tracking_number}`
+        `Hi ${order.name}, your ${SHOP} order has been shipped! Track your parcel here: https://auspost.com.au/mypost/track/#/details/${tracking_number}`
       );
     } catch (e) {
       console.error('SMS error:', e.message);
     }
-  }
-
-  // Staff notification SMS
-  if (status === 'del_shipped' || status === 'delivered') {
-    // handled by notifyStaff in woo-order.js on creation — no duplicate needed here
   }
 
   return res.status(200).json({ success: true });
