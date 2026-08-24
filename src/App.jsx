@@ -185,6 +185,113 @@ function TrackingModal({ order, onConfirm, onCancel }) {
   );
 }
 
+// ── CREATE ORDER MANUALLY (staff) ────────────────────────────────────────────────
+function AddOrderModal({ onClose, onCreated }) {
+  const today = new Date().toISOString().split('T')[0];
+  const [form, setForm]           = useState({ name: '', phone: '', order_text: '', pickup: today, notes: '' });
+  const [errors, setErrors]       = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [failed, setFailed]       = useState(false);
+
+  function validate() {
+    const e = {};
+    if (!form.name.trim())       e.name       = true;
+    if (!form.phone.trim())      e.phone      = true;
+    if (!form.order_text.trim()) e.order_text = true;
+    if (!form.pickup)            e.pickup     = true;
+    setErrors(e);
+    return !Object.keys(e).length;
+  }
+
+  async function submit() {
+    if (!validate() || submitting) return;
+    setSubmitting(true);
+    setFailed(false);
+    const { ok } = await callAPI('/api/create-order', {
+      method: 'POST',
+      body: {
+        name:       form.name.trim(),
+        phone:      form.phone.trim(),
+        order_text: form.order_text.trim(),
+        pickup:     form.pickup,
+        notes:      form.notes.trim(),
+      },
+    });
+    setSubmitting(false);
+    if (ok) onCreated();
+    else setFailed(true);
+  }
+
+  const inp = { display: 'block', width: '100%', height: 48, background: BG, border: `1.5px solid ${BORDER}`, color: T1, fontFamily: FONT, fontSize: '0.95rem', fontWeight: 600, padding: '0 0.9rem', borderRadius: '10px', outline: 'none' };
+  const lbl = { display: 'block', fontSize: '0.66rem', fontWeight: 800, letterSpacing: '1.3px', textTransform: 'uppercase', color: T2, marginBottom: '0.4rem' };
+  const err = { fontSize: '0.7rem', color: RED, fontWeight: 700, marginTop: '0.3rem' };
+
+  return (
+    <div className="fade" style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} />
+      <div className="sheet" style={{ position: 'relative', background: SURFACE, borderRadius: '20px 20px 0 0', padding: '12px 0 0', maxHeight: '88vh', overflow: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.1rem' }}>
+          <div style={{ width: 40, height: 4, background: BORDER, borderRadius: 2 }} />
+        </div>
+        <div style={{ padding: '0 1.4rem 1.6rem' }}>
+          <div style={{ fontSize: '0.6rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: T3, marginBottom: '0.3rem' }}>Staff Entry</div>
+          <div style={{ fontSize: '1.15rem', fontWeight: 900, color: T1, marginBottom: '0.3rem' }}>✏️ Create Order Manually</div>
+          <div style={{ fontSize: '0.8rem', color: T2, lineHeight: 1.55, marginBottom: '1.3rem' }}>
+            For orders taken over the phone or in person. The customer still gets the normal confirmation text once you place it.
+          </div>
+
+          <div style={{ marginBottom: '0.95rem' }}>
+            <label style={lbl}>Customer Name</label>
+            <input style={{ ...inp, borderColor: errors.name ? RED : BORDER }} value={form.name} placeholder="Full name"
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            {errors.name && <div style={err}>Please enter a name.</div>}
+          </div>
+
+          <div style={{ marginBottom: '0.95rem' }}>
+            <label style={lbl}>Phone Number</label>
+            <input style={{ ...inp, borderColor: errors.phone ? RED : BORDER }} value={form.phone} placeholder="04XX XXX XXX" type="tel"
+              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+            {errors.phone && <div style={err}>Please enter a phone number.</div>}
+          </div>
+
+          <div style={{ marginBottom: '0.95rem' }}>
+            <label style={lbl}>Order</label>
+            <textarea style={{ ...inp, height: 'auto', minHeight: 70, padding: '0.7rem 0.9rem', resize: 'vertical', borderColor: errors.order_text ? RED : BORDER }}
+              value={form.order_text} placeholder="e.g. 2kg boerewors, 1kg biltong (sliced thin)"
+              onChange={e => setForm(f => ({ ...f, order_text: e.target.value }))} />
+            {errors.order_text && <div style={err}>Please enter what they've ordered.</div>}
+          </div>
+
+          <div style={{ marginBottom: '0.95rem' }}>
+            <label style={lbl}>Pickup Date</label>
+            <input type="date" style={{ ...inp, borderColor: errors.pickup ? RED : BORDER }} value={form.pickup} min={today}
+              onChange={e => setForm(f => ({ ...f, pickup: e.target.value }))} />
+            {errors.pickup && <div style={err}>Please pick a date.</div>}
+          </div>
+
+          <div style={{ marginBottom: '1.4rem' }}>
+            <label style={lbl}>Notes (optional)</label>
+            <textarea style={{ ...inp, height: 'auto', minHeight: 54, padding: '0.7rem 0.9rem', resize: 'vertical' }}
+              value={form.notes} placeholder="Any special requests…"
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+          </div>
+
+          {failed && <div style={{ ...err, marginBottom: '0.75rem' }}>Couldn't save the order — check your connection and try again.</div>}
+
+          <button className="btn-tap" onClick={submit} disabled={submitting}
+            style={{ display: 'block', width: '100%', height: 58, background: T1, color: BG, border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '0.95rem', fontWeight: 900, letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer', opacity: submitting ? 0.6 : 1, marginBottom: '0.55rem' }}>
+            {submitting ? 'Adding…' : 'Add Order & Text Customer'}
+          </button>
+          <button className="btn-tap" onClick={onClose}
+            style={{ display: 'block', width: '100%', height: 46, background: 'none', border: `1px solid ${BORDER}`, color: T3, borderRadius: '10px', fontFamily: FONT, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ORDER DETAIL MODAL ─────────────────────────────────────────────────────────
 function OrderModal({ order, cols, archiveColId, isDelivery, onMove, onShip, onDel, onClose }) {
   const col       = cols.find(c => c.id === order.status);
@@ -470,6 +577,7 @@ export default function App() {
   const [pinLoading, setPinLoading]   = useState(false);
   const [refreshing, setRefreshing]   = useState(false);
   const [isMobile, setIsMobile]       = useState(window.innerWidth <= 768);
+  const [showAddOrder, setShowAddOrder] = useState(false);
   const dragId      = useRef(null);
   const touchDragId = useRef(null);
 
@@ -674,7 +782,23 @@ export default function App() {
 
         {/* Content */}
         <div style={{ paddingTop: '0.85rem', paddingBottom: '2rem', minHeight: 'calc(100vh - 120px)' }}>
-          {activeTab === 'pickup'   && <KanbanBoard cols={PICKUP_COLS} archiveColId="picked_up" archiveLabel="Picked Up ✓" isDelivery={false} {...boardProps} />}
+          {activeTab === 'pickup' && (
+            <>
+              <div style={{ padding: '0 1rem', marginBottom: '0.75rem' }}>
+                <button className="btn-tap" onClick={() => setShowAddOrder(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                    width: m ? '100%' : 'auto', height: 54,
+                    padding: m ? undefined : '0 1.6rem',
+                    background: AMBER, color: '#1a1200', border: 'none', borderRadius: '12px',
+                    fontFamily: FONT, fontSize: '0.87rem', fontWeight: 900, letterSpacing: '0.5px', cursor: 'pointer',
+                  }}>
+                  ➕ Create Order Manually
+                </button>
+              </div>
+              <KanbanBoard cols={PICKUP_COLS} archiveColId="picked_up" archiveLabel="Picked Up ✓" isDelivery={false} {...boardProps} />
+            </>
+          )}
           {activeTab === 'delivery' && <KanbanBoard cols={DEL_COLS}    archiveColId="shipped"    archiveLabel="Shipped 📮"   isDelivery={true}  {...boardProps} />}
           {activeTab === 'archive'  && <ArchiveList orders={orders} onMove={move} onDel={del} />}
         </div>
@@ -700,6 +824,13 @@ export default function App() {
             order={pendingShipOrder}
             onConfirm={tracking => { move(pendingShipOrder.id, 'shipped', tracking); setPendingShipOrder(null); }}
             onCancel={() => setPendingShipOrder(null)} />
+        )}
+
+        {/* Create order manually — staff phone/in-person orders */}
+        {showAddOrder && (
+          <AddOrderModal
+            onClose={() => setShowAddOrder(false)}
+            onCreated={() => { setShowAddOrder(false); loadOrders(); }} />
         )}
       </>
     );
