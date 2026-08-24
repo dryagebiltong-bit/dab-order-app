@@ -14,9 +14,19 @@ export default async function handler(req, res) {
   const woo = req.body;
   if (!woo || !woo.id) return res.status(200).json({ skipped: 'Test ping received' });
 
-  const shippingMethod = (woo.shipping_lines?.[0]?.method_title || '').toLowerCase();
-  if (!shippingMethod.includes('standard')) {
-    return res.status(200).json({ skipped: 'Not a standard shipping order' });
+  // Only skip orders that are genuinely Local Pickup (handled separately, manually,
+  // via the in-app "New Order" form). Every other shipping method — Standard,
+  // Weight Based, Express, or anything added in future — is treated as a delivery
+  // order. Previously this only allowed methods whose title contained the word
+  // "standard", which silently dropped any other delivery method (e.g. "Weight
+  // Based Shipping") with no error and no record anywhere.
+  const shippingLine  = woo.shipping_lines?.[0] || {};
+  const methodId      = String(shippingLine.method_id || '').toLowerCase();
+  const methodTitle   = String(shippingLine.method_title || '').toLowerCase();
+  const isLocalPickup = methodId.includes('pickup') || methodTitle.includes('pickup') || methodTitle.includes('collect');
+
+  if (isLocalPickup) {
+    return res.status(200).json({ skipped: 'Local pickup order (handled separately)' });
   }
 
   const { data: existing } = await supabase
@@ -73,6 +83,15 @@ export default async function handler(req, res) {
   const { error } = await supabase.from('orders').insert(order);
   if (error) {
     console.error('Supabase insert error:', error);
+    // Safety net: if the order can't be auto-saved for any reason, still get a
+    // text so this never fails completely silently again.
+    try {
+      await notifyStaff(
+        `⚠️ New WooCommerce order #${order.woo_order_number} came in but could NOT be saved automatically. Please check WooCommerce and add it to the app manually.\n\nCustomer: ${name}\nPhone: ${phone}`
+      );
+    } catch (e) {
+      console.error('Staff alert error:', e.message);
+    }
     return res.status(500).json({ error: 'Could not save order' });
   }
 
