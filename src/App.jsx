@@ -154,11 +154,17 @@ function calendarDateOf(o) {
   return o.pickup || isoOf(new Date(o.created_at));
 }
 
-async function callAPI(path, options = {}, pin = null) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (pin) headers['x-staff-pin'] = pin;
+/* The staff board lives at its own URL. vercel.json already sends every
+   non-/api path to index.html, so /staff needs no extra config. */
+const STAFF_ROUTE = typeof window !== 'undefined' &&
+  /^\/staff\/?$/i.test(window.location.pathname);
+
+async function callAPI(path, options = {}) {
   const res = await fetch(path, {
-    ...options, headers,
+    ...options,
+    headers: { 'Content-Type': 'application/json' },
+    // Session cookie rides along automatically; nothing is kept in JS.
+    credentials: 'same-origin',
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   let data = {};
@@ -292,7 +298,7 @@ function TrackingModal({ order, onConfirm, onCancel }) {
 }
 
 /* ── Create order manually (staff) ───────────────────────────────────────── */
-function AddOrderModal({ pin, defaultType, onClose, onCreated }) {
+function AddOrderModal({ defaultType, onClose, onCreated }) {
   const [type, setType]           = useState(defaultType === 'deliver' ? 'deliver' : 'pickup');
   const [form, setForm]           = useState({
     name: '', phone: '', order_text: '', notes: '',
@@ -345,8 +351,9 @@ function AddOrderModal({ pin, defaultType, onClose, onCreated }) {
       body.state_au      = 'WA';
     }
 
-    // Sent with the staff PIN, which is what allows a same-day order.
-    const { ok, data } = await callAPI('/api/create-order', { method: 'POST', body }, pin);
+    // The session cookie marks this as a staff request, which is what allows
+    // a same-day order. Customers hitting the public form have no cookie.
+    const { ok, data } = await callAPI('/api/create-order', { method: 'POST', body });
     setSubmitting(false);
     if (ok) onCreated(isDelivery ? 'deliver' : 'pickup', form.name.trim());
     else setFailed(data?.error || 'Could not save the order. Check your connection and try again.');
@@ -963,7 +970,8 @@ function ArchiveList({ orders, onMove, onDel }) {
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
-  const [view, setView]           = useState('customer');
+  const [authed, setAuthed]       = useState(false);
+  const [checkingSession, setCheckingSession] = useState(STAFF_ROUTE);
   const [mode, setMode]           = useState('board');       // board | calendar
   const [section, setSection]     = useState('pickup');
   const [calFilter, setCalFilter] = useState('pickup');
@@ -977,7 +985,6 @@ export default function App() {
   const [errors, setErrors]       = useState({});
   const [formError, setFormError] = useState('');
   const [dragOver, setDragOver]   = useState(null);
-  const [pin, setPin]             = useState('');
   const [pinInput, setPinInput]   = useState('');
   const [pinError, setPinError]   = useState('');
   const [pinLoading, setPinLoading] = useState(false);
@@ -997,12 +1004,24 @@ export default function App() {
     return () => window.removeEventListener('resize', h);
   }, []);
 
-  useEffect(() => { if (view === 'staff' && pin) loadOrders(); }, [view, pin]); // eslint-disable-line
+  // On the /staff URL, ask the server whether this device is still signed in
+  // before showing anything, so a returning iPad goes straight to the board.
   useEffect(() => {
-    if (view !== 'staff' || !pin) return;
+    if (!STAFF_ROUTE) return;
+    let cancelled = false;
+    (async () => {
+      const { ok } = await callAPI('/api/session', { method: 'GET' });
+      if (!cancelled) { setAuthed(ok); setCheckingSession(false); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => { if (authed) loadOrders(); }, [authed]); // eslint-disable-line
+  useEffect(() => {
+    if (!authed) return;
     const t = setInterval(loadOrders, 20000);
     return () => clearInterval(t);
-  }, [view, pin]); // eslint-disable-line
+  }, [authed]); // eslint-disable-line
 
   function flash(msg) {
     setToast(msg);
@@ -1011,7 +1030,7 @@ export default function App() {
   }
 
   async function loadOrders() {
-    const { ok, data } = await callAPI('/api/get-orders', { method: 'GET' }, pin);
+    const { ok, data } = await callAPI('/api/get-orders', { method: 'GET' });
     if (ok) setOrders(data.orders || []);
   }
   async function handleRefresh() {
@@ -1022,8 +1041,9 @@ export default function App() {
   async function handlePinSubmit() {
     if (!pinInput.trim()) return;
     setPinLoading(true); setPinError('');
-    const { ok } = await callAPI('/api/verify-pin', { method: 'POST', body: { pin: pinInput.trim() } });
-    if (ok) { setPin(pinInput.trim()); setPinInput(''); }
+    // A correct PIN gets an HttpOnly session cookie back, good for 30 days.
+    const { ok } = await callAPI('/api/session', { method: 'POST', body: { pin: pinInput.trim() } });
+    if (ok) { setAuthed(true); setPinInput(''); }
     else setPinError('Incorrect PIN. Try again.');
     setPinLoading(false);
   }
@@ -1063,7 +1083,7 @@ export default function App() {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus, ...(trackingNumber ? { tracking_number: trackingNumber } : {}) } : o));
     const body = { id, status: newStatus };
     if (trackingNumber) body.tracking_number = trackingNumber;
-    const { ok } = await callAPI('/api/update-order', { method: 'POST', body }, pin);
+    const { ok } = await callAPI('/api/update-order', { method: 'POST', body });
     if (!ok) { flash('Could not save that change — reloading'); loadOrders(); }
   }
 
@@ -1072,14 +1092,14 @@ export default function App() {
     setSelectedOrder(null);
     const { ok } = await callAPI('/api/update-order', {
       method: 'POST', body: { id, pickup: date, pickup_time: time, notify: !!notify },
-    }, pin);
+    });
     if (ok) flash(`Moved to ${formatPickup(date)}${time && time !== 'anytime' ? ' ' + formatTime(time) : ''}${notify ? ' — customer texted' : ' — no text sent'}`);
     else { flash('Could not save the new date — reloading'); loadOrders(); }
   }
 
   async function del(id) {
     setOrders(prev => prev.filter(o => o.id !== id));
-    callAPI('/api/delete-order', { method: 'DELETE', body: { id } }, pin);
+    callAPI('/api/delete-order', { method: 'DELETE', body: { id } });
   }
 
   /* Resolve a drop target into a real status for this order. */
@@ -1133,8 +1153,20 @@ export default function App() {
   const m = isMobile;
   const currentSection = SECTIONS.find(s => s.id === section) || SECTIONS[0];
 
+  /* ── Session check in flight ── */
+  if (STAFF_ROUTE && checkingSession) {
+    return (
+      <>
+        <GlobalStyles />
+        <div style={{ fontFamily: FONT, background: BG, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '2.5px', textTransform: 'uppercase', color: T3 }}>Loading…</div>
+        </div>
+      </>
+    );
+  }
+
   /* ── PIN gate ── */
-  if (view === 'staff' && !pin) {
+  if (STAFF_ROUTE && !authed) {
     return (
       <>
         <GlobalStyles />
@@ -1158,7 +1190,7 @@ export default function App() {
               </button>
             </div>
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-              <span onClick={() => setView('customer')} style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: T3, cursor: 'pointer' }}>← Back to Order Form</span>
+              <a href="/" style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: T3, cursor: 'pointer', textDecoration: 'none' }}>← Back to Order Form</a>
             </div>
           </div>
         </div>
@@ -1167,7 +1199,7 @@ export default function App() {
   }
 
   /* ── Staff board ── */
-  if (view === 'staff' && pin) {
+  if (STAFF_ROUTE && authed) {
     return (
       <>
         <GlobalStyles />
@@ -1193,7 +1225,7 @@ export default function App() {
                   {refreshing ? '...' : '↻ Refresh'}
                 </button>
               )}
-              <button className="btn-tap" onClick={() => { setPin(''); setView('customer'); }}
+              <button className="btn-tap" onClick={async () => { await callAPI('/api/session', { method: 'DELETE' }); setAuthed(false); setOrders([]); }}
                 style={{ height: 34, padding: '0 0.7rem', background: 'none', border: `1px solid ${BORDER}`, color: T3, fontFamily: FONT, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: '8px' }}>
                 Lock
               </button>
@@ -1263,7 +1295,6 @@ export default function App() {
 
         {showAddOrder && (
           <AddOrderModal
-            pin={pin}
             defaultType={section === 'deliver' ? 'deliver' : 'pickup'}
             onClose={() => setShowAddOrder(false)}
             onCreated={(type, name) => {
@@ -1299,9 +1330,6 @@ export default function App() {
               <button className="btn-tap" onClick={() => setSuccess(false)} style={{ display: 'block', width: '100%', height: 54, background: '#111827', color: '#fff', border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '0.9rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer' }}>
                 Place Another Order
               </button>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: '1.25rem' }}>
-              <span onClick={() => setView('staff')} style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#9ca3af', cursor: 'pointer' }}>Staff View</span>
             </div>
           </div>
         </div>
@@ -1393,9 +1421,7 @@ export default function App() {
               {submitting ? 'Placing Order…' : 'Place Order'}
             </button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: '1.25rem', paddingBottom: '1.5rem' }}>
-            <span onClick={() => setView('staff')} style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#9ca3af', cursor: 'pointer', userSelect: 'none' }}>Staff View</span>
-          </div>
+          <div style={{ paddingBottom: '1.5rem' }} />
         </div>
       </div>
     </>
