@@ -160,16 +160,21 @@ const STAFF_ROUTE = typeof window !== 'undefined' &&
   /^\/staff\/?$/i.test(window.location.pathname);
 
 async function callAPI(path, options = {}) {
-  const res = await fetch(path, {
-    ...options,
-    headers: { 'Content-Type': 'application/json' },
-    // Session cookie rides along automatically; nothing is kept in JS.
-    credentials: 'same-origin',
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json' },
+      // Session cookie rides along automatically; nothing is kept in JS.
+      credentials: 'same-origin',
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch {
+    return { ok: false, status: 0, data: {} };   // offline / DNS / CORS
+  }
   let data = {};
-  try { data = await res.json(); } catch { /* empty body */ }
-  return { ok: res.ok, data };
+  try { data = await res.json(); } catch { /* empty or non-JSON body */ }
+  return { ok: res.ok, status: res.status, data };
 }
 
 function GlobalStyles() {
@@ -988,6 +993,8 @@ export default function App() {
   const [pinInput, setPinInput]   = useState('');
   const [pinError, setPinError]   = useState('');
   const [pinLoading, setPinLoading] = useState(false);
+  const [lockedFor, setLockedFor]     = useState(0);      // ms remaining on a lockout
+  const [attemptsLeft, setAttemptsLeft] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [isMobile, setIsMobile]   = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
   const dragId      = useRef(null);
@@ -1010,7 +1017,7 @@ export default function App() {
     if (!STAFF_ROUTE) return;
     let cancelled = false;
     (async () => {
-      const { ok } = await callAPI('/api/session', { method: 'GET' });
+      const { ok } = await callAPI('/api/staff-login', { method: 'GET' });
       if (!cancelled) { setAuthed(ok); setCheckingSession(false); }
     })();
     return () => { cancelled = true; };
@@ -1022,6 +1029,12 @@ export default function App() {
     const t = setInterval(loadOrders, 20000);
     return () => clearInterval(t);
   }, [authed]); // eslint-disable-line
+
+  useEffect(() => {
+    if (lockedFor <= 0) return;
+    const t = setTimeout(() => setLockedFor(v => Math.max(0, v - 1000)), 1000);
+    return () => clearTimeout(t);
+  }, [lockedFor]);
 
   function flash(msg) {
     setToast(msg);
@@ -1039,12 +1052,25 @@ export default function App() {
     setTimeout(() => setRefreshing(false), 600);
   }
   async function handlePinSubmit() {
-    if (!pinInput.trim()) return;
+    if (!pinInput.trim() || lockedFor > 0 || pinLoading) return;
     setPinLoading(true); setPinError('');
     // A correct PIN gets an HttpOnly session cookie back, good for 30 days.
-    const { ok } = await callAPI('/api/session', { method: 'POST', body: { pin: pinInput.trim() } });
-    if (ok) { setAuthed(true); setPinInput(''); }
-    else setPinError('Incorrect PIN. Try again.');
+    const { ok, status, data } = await callAPI('/api/staff-login', { method: 'POST', body: { pin: pinInput.trim() } });
+    if (ok) {
+      setAuthed(true); setPinInput(''); setLockedFor(0); setAttemptsLeft(null);
+    } else if (status === 429) {
+      setPinError(data?.error || 'Too many incorrect attempts. Please wait and try again.');
+      if (data?.lockedForMs) { setLockedFor(data.lockedForMs); setPinInput(''); }
+    } else if (status === 401) {
+      setPinError(data?.error || 'Incorrect PIN. Try again.');
+      setAttemptsLeft(typeof data?.remaining === 'number' ? data.remaining : null);
+    } else if (status === 404) {
+      setPinError('Sign-in service not found. api/staff-login.js is missing from the deployment.');
+    } else if (status === 0) {
+      setPinError('Cannot reach the server. Check your internet connection.');
+    } else {
+      setPinError(`Server error (${status}). Your PIN is probably fine — try again shortly.`);
+    }
     setPinLoading(false);
   }
 
@@ -1166,6 +1192,10 @@ export default function App() {
   }
 
   /* ── PIN gate ── */
+  const locked   = lockedFor > 0;
+  const lockMins = Math.floor(lockedFor / 60000);
+  const lockSecs = String(Math.floor((lockedFor % 60000) / 1000)).padStart(2, '0');
+
   if (STAFF_ROUTE && !authed) {
     return (
       <>
@@ -1180,13 +1210,29 @@ export default function App() {
               <div style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '2.5px', textTransform: 'uppercase', color: T3, textAlign: 'center', marginBottom: '1.75rem' }}>Staff Login</div>
               <Field label="PIN" error={pinError}>
                 <input type="password" inputMode="numeric" maxLength={8} value={pinInput} placeholder="Enter PIN" autoFocus
+                  disabled={locked}
                   onChange={e => { setPinInput(e.target.value); setPinError(''); }}
                   onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
-                  style={{ ...inputStyle(!!pinError), height: 56, fontSize: '1.3rem', letterSpacing: '6px' }} />
+                  style={{ ...inputStyle(!!pinError), height: 56, fontSize: '1.3rem', letterSpacing: '6px', opacity: locked ? 0.5 : 1 }} />
               </Field>
-              <button className="btn-tap" onClick={handlePinSubmit} disabled={pinLoading}
-                style={{ display: 'block', width: '100%', height: 56, background: T1, color: BG, border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '0.9rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', cursor: 'pointer', opacity: pinLoading ? 0.6 : 1, marginTop: '0.5rem' }}>
-                {pinLoading ? '...' : 'Enter'}
+
+              {locked && (
+                <div style={{ background: dim(RED, 0.1), border: `1px solid ${dim(RED, 0.35)}`, borderRadius: '10px', padding: '0.7rem 0.85rem', marginBottom: '0.85rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#fca5a5', letterSpacing: '0.5px' }}>
+                    🔒 Locked — try again in {lockMins}:{lockSecs}
+                  </div>
+                </div>
+              )}
+
+              {!locked && attemptsLeft !== null && attemptsLeft > 0 && (
+                <div style={{ fontSize: '0.72rem', color: T3, fontWeight: 700, marginBottom: '0.85rem', textAlign: 'center' }}>
+                  {attemptsLeft} attempt{attemptsLeft === 1 ? '' : 's'} left before a temporary lockout
+                </div>
+              )}
+
+              <button className="btn-tap" onClick={handlePinSubmit} disabled={pinLoading || locked}
+                style={{ display: 'block', width: '100%', height: 56, background: T1, color: BG, border: 'none', borderRadius: '12px', fontFamily: FONT, fontSize: '0.9rem', fontWeight: 900, letterSpacing: '2px', textTransform: 'uppercase', cursor: locked ? 'not-allowed' : 'pointer', opacity: (pinLoading || locked) ? 0.45 : 1, marginTop: '0.5rem' }}>
+                {locked ? 'Locked' : pinLoading ? '...' : 'Enter'}
               </button>
             </div>
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
@@ -1225,7 +1271,7 @@ export default function App() {
                   {refreshing ? '...' : '↻ Refresh'}
                 </button>
               )}
-              <button className="btn-tap" onClick={async () => { await callAPI('/api/session', { method: 'DELETE' }); setAuthed(false); setOrders([]); }}
+              <button className="btn-tap" onClick={async () => { await callAPI('/api/staff-login', { method: 'DELETE' }); setAuthed(false); setOrders([]); }}
                 style={{ height: 34, padding: '0 0.7rem', background: 'none', border: `1px solid ${BORDER}`, color: T3, fontFamily: FONT, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer', borderRadius: '8px' }}>
                 Lock
               </button>
