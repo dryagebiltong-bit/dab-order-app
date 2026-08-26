@@ -920,14 +920,42 @@ function CalendarView({ orders, filter, setFilter, isMobile, onCardTap, onAdd })
 }
 
 /* ── Archive ─────────────────────────────────────────────────────────────── */
-function ArchiveList({ orders, onMove, onDel }) {
+function ArchiveList({ orders, onMove, onDel, isMobile }) {
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');       // all | pickup | website | deliver
+  const [order,  setOrder]  = useState('newest');    // newest | oldest
+
   const q = search.toLowerCase().trim();
-  const list = orders
-    .filter(o => ARCHIVE_STATUSES.has(o.status))
+  const archived = orders.filter(o => ARCHIVE_STATUSES.has(o.status));
+
+  // Counts sit on the chips, so an empty section is obvious before you tap it.
+  const countFor = id => id === 'all' ? archived.length : archived.filter(o => sectionOf(o) === id).length;
+
+  const list = archived
+    .filter(o => filter === 'all' || sectionOf(o) === filter)
     .filter(o => !q || [o.name, o.phone, o.order_text, o.city, o.woo_order_number, o.tracking_number]
       .some(f => (f || '').toLowerCase().includes(q)))
-    .sort((a, b) => b.created_at - a.created_at);
+    .sort((a, b) => order === 'newest' ? b.created_at - a.created_at : a.created_at - b.created_at);
+
+  const chip = (id, label) => {
+    const on = filter === id;
+    const c  = countFor(id);
+    const col = id === 'all' ? T2 : TYPE_META[id].color;
+    return (
+      <button key={id} className="btn-tap" onClick={() => setFilter(id)}
+        style={{
+          height: 34, padding: '0 0.75rem', borderRadius: '20px', cursor: 'pointer', fontFamily: FONT,
+          fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.6px', textTransform: 'uppercase',
+          whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+          background: on ? dim(col, 0.18) : 'none',
+          border: `1px solid ${on ? dim(col, 0.6) : BORDER}`,
+          color: on ? col : T3,
+        }}>
+        {id === 'all' ? '⊞' : TYPE_META[id].icon} {label}
+        <span style={{ fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, opacity: c ? 0.9 : 0.45 }}>{c}</span>
+      </button>
+    );
+  };
 
   const RESTORE_TO = { pickup: 'received', website: 'del_received', deliver: 'hd_received' };
   const DONE_LABEL = { pickup: 'Picked up', website: 'Shipped', deliver: 'Delivered' };
@@ -935,10 +963,25 @@ function ArchiveList({ orders, onMove, onDel }) {
   return (
     <div style={{ padding: '1rem', overflowY: 'auto', flex: 1, minHeight: 0 }}>
       <input type="text" placeholder="Search archive…" value={search} onChange={e => setSearch(e.target.value)}
-        style={{ ...inputStyle(false), height: 48, background: SURFACE, marginBottom: '1rem' }} />
+        style={{ ...inputStyle(false), height: 48, background: SURFACE, marginBottom: '0.75rem' }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {chip('all', 'All')}{chip('pickup', 'Pickup')}{chip('website', 'Website')}{chip('deliver', 'Deliver')}
+        </div>
+        <button className="btn-tap" onClick={() => setOrder(o => o === 'newest' ? 'oldest' : 'newest')}
+          style={{ height: 34, padding: '0 0.75rem', background: 'none', border: `1px solid ${BORDER}`, color: T2,
+                   borderRadius: '8px', fontFamily: FONT, fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.6px',
+                   textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap',
+                   width: isMobile ? '100%' : 'auto' }}>
+          {order === 'newest' ? '↓ Newest first' : '↑ Oldest first'}
+        </button>
+      </div>
       {list.length === 0 && (
         <div style={{ textAlign: 'center', color: T3, marginTop: '3rem', fontSize: '0.8rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
-          {q ? 'No results' : 'No archived orders yet'}
+          {q ? 'No results'
+             : filter === 'all' ? 'No archived orders yet'
+             : `No archived ${TYPE_META[filter].label.toLowerCase()} orders`}
         </div>
       )}
       {list.map(o => {
@@ -1300,7 +1343,7 @@ export default function App() {
               <CalendarView orders={orders} filter={calFilter} setFilter={setCalFilter} isMobile={m}
                 onCardTap={setSelectedOrder} onAdd={() => setShowAddOrder(true)} />
             ) : currentSection.archiveView ? (
-              <ArchiveList orders={orders} onMove={move} onDel={del} />
+              <ArchiveList orders={orders} onMove={move} onDel={del} isMobile={m} />
             ) : (
               <>
                 <div style={{ padding: '0.75rem 1rem 0.35rem', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', flexWrap: 'wrap' }}>
